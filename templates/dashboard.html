@@ -1,41 +1,55 @@
 <!-- templates/dashboard.html -->
 {% extends "base.html" %}
 
-{% block title %}Dashboard{% endblock %}
+{% block title %}Dashboard - Raman{% endblock %}
 
 {% block content %}
 <div class="card">
-    <h2>Dobrodošli, {{ username }}!</h2>
-    <p style="color: #666; margin-top: 10px;">Vaša rola: <strong>{{ role }}</strong></p>
+    <h2 style="margin-bottom: 10px;">Welcome, {{ session.username }}!</h2>
+    <p style="color: #7f8c8d; margin-bottom: 30px;">Role: <strong>{{ session.role }}</strong></p>
 
-    {% if role in ['Administrator', 'Osoblje'] %}
-    <div class="nav-links">
-        <a href="{{ url_for('pacijenti') }}" class="btn btn-primary">Pregled Pacijenata</a>
-    </div>
+    {% if session.role in ['Administrator', 'Staff'] %}
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px;">
+        <a href="{{ url_for('new_patient') }}" class="btn btn-success" style="padding: 40px 20px; font-size: 16px;">
+            <div style="font-size: 32px; margin-bottom: 10px;">+</div>
+            New Patient
+        </a>
 
-    {% if stats %}
-    <div class="stats-grid">
-        <div class="stat-card">
-            <h3>{{ stats.total_patients or 0 }}</h3>
-            <p>Ukupno pacijenata</p>
-        </div>
-        <div class="stat-card">
-            <h3>{{ stats.total_diagnoses or 0 }}</h3>
-            <p>Ukupno dijagnoza</p>
-        </div>
-        {% if role == 'Administrator' and stats.total_users %}
-        <div class="stat-card">
-            <h3>{{ stats.total_users }}</h3>
-            <p>Ukupno korisnika</p>
-        </div>
+        <a href="#" class="btn btn-primary" style="padding: 40px 20px; font-size: 16px;">
+            <div style="font-size: 32px; margin-bottom: 10px;">🔍</div>
+            Validate Data
+        </a>
+
+        <a href="#" class="btn btn-primary" style="padding: 40px 20px; font-size: 16px;">
+            <div style="font-size: 32px; margin-bottom: 10px;">📊</div>
+            Export Data
+        </a>
+
+        {% if session.role == 'Administrator' %}
+        <a href="#" class="btn btn-secondary" style="padding: 40px 20px; font-size: 16px;">
+            <div style="font-size: 32px; margin-bottom: 10px;">📋</div>
+            Import Reference Lists
+        </a>
         {% endif %}
     </div>
     {% endif %}
+</div>
 
-    {% elif role == 'Pacijent' %}
-    <p style="margin-top: 20px; color: #666;">
-        Pacijent panel trenutno u razvoju. Ovdje će biti prikazane vaše dijagnoze i povijest liječenja.
-    </p>
-    {% endif %}
+<div class="card">
+    <h3 style="margin-bottom: 20px; color: #2c3e50;">System Information</h3>
+    <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
+        <div style="padding: 20px; background: #ecf0f1; border-radius: 6px;">
+            <div style="font-size: 24px; font-weight: bold; color: #3498db;">0</div>
+            <div style="color: #7f8c8d; font-size: 14px;">Total Patients</div>
+        </div>
+        <div style="padding: 20px; background: #ecf0f1; border-radius: 6px;">
+            <div style="font-size: 24px; font-weight: bold; color: #27ae60;">0</div>
+            <div style="color: #7f8c8d; font-size: 14px;">Samples Collected</div>
+        </div>
+        <div style="padding: 20px; background: #ecf0f1; border-radius: 6px;">
+            <div style="font-size: 24px; font-weight: bold; color: #e74c3c;">1500</div>
+            <div style="color: #7f8c8d; font-size: 14px;">Next Patient ID</div>
+        </div>
+    </div>
 </div>
 {% endblock %}

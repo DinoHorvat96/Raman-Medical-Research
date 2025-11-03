@@ -1,25 +1,28 @@
 <!-- templates/login.html -->
 {% extends "base.html" %}
 
-{% block title %}Login - Medical Research{% endblock %}
+{% block title %}Login - Raman{% endblock %}
 
 {% block content %}
-<div style="max-width: 400px; margin: 100px auto;">
+<div style="max-width: 450px; margin: 100px auto;">
     <div class="card">
-        <h2 style="text-align: center; margin-bottom: 30px; color: #667eea;">Prijava</h2>
+        <h2 style="text-align: center; margin-bottom: 10px; color: #2c3e50;">Welcome to Raman</h2>
+        <p style="text-align: center; color: #7f8c8d; margin-bottom: 30px; font-size: 14px;">
+            Medical Research Database System
+        </p>
         <form method="POST" action="{{ url_for('login') }}">
             <div class="form-group">
-                <label for="username">Korisničko ime</label>
+                <label for="username">Username</label>
                 <input type="text" id="username" name="username" required autofocus>
             </div>
             <div class="form-group">
-                <label for="password">Lozinka</label>
+                <label for="password">Password</label>
                 <input type="password" id="password" name="password" required>
             </div>
-            <button type="submit" class="btn btn-primary" style="width: 100%;">Prijavi se</button>
+            <button type="submit" class="btn btn-primary" style="width: 100%;">Sign In</button>
         </form>
-        <p style="text-align: center; margin-top: 20px; color: #666; font-size: 12px;">
-            Default login: Admin / admin123
+        <p style="text-align: center; margin-top: 20px; color: #95a5a6; font-size: 12px;">
+            Default: Admin / admin123
         </p>
     </div>
 </div>

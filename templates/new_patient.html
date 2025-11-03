@@ -1,0 +1,181 @@
+<!-- templates/new_patient.html -->
+{% extends "base.html" %}
+
+{% block title %}New Patient - Raman{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <h2>New Patient Entry</h2>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+
+    <form method="POST" id="patientForm">
+        <!-- General Data Section -->
+        <div style="border-bottom: 2px solid #ecf0f1; padding-bottom: 20px; margin-bottom: 30px;">
+            <h3 style="color: #2c3e50; margin-bottom: 20px;">General Data</h3>
+
+            <div class="form-group">
+                <label for="patient_id">Patient ID *</label>
+                <input type="number" id="patient_id" name="patient_id"
+                       value="{{ next_patient_id }}"
+                       min="1" max="99999" required
+                       onchange="checkPatientId(this.value)">
+                <small id="id-status" style="display: none; margin-top: 5px;"></small>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="patient_name">Patient Name *</label>
+                    <input type="text" id="patient_name" name="patient_name" required
+                           placeholder="First Name Last Name">
+                </div>
+
+                <div class="form-group">
+                    <label for="mbo">MBO (9 digits) *</label>
+                    <input type="text" id="mbo" name="mbo" required
+                           pattern="[0-9]{9}" maxlength="9"
+                           placeholder="123456789">
+                </div>
+
+                <div class="form-group">
+                    <label for="sex">Sex *</label>
+                    <select id="sex" name="sex" required>
+                        <option value="">Select...</option>
+                        <option value="M">M (Male)</option>
+                        <option value="F">F (Female)</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Date of Birth *</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 10px;">
+                        <input type="number" name="dob_day" placeholder="DD" min="1" max="31" required>
+                        <input type="number" name="dob_month" placeholder="MM" min="1" max="12" required>
+                        <input type="number" name="dob_year" placeholder="YYYY" min="1900" max="2100" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label>Date of Sample Collection *</label>
+                    <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 10px;">
+                        <input type="number" name="collection_day" placeholder="DD" min="1" max="31" required>
+                        <input type="number" name="collection_month" placeholder="MM" min="1" max="12" required>
+                        <input type="number" name="collection_year" placeholder="YYYY" min="1900" max="2100" required>
+                    </div>
+                </div>
+
+                <div class="form-group">
+                    <label for="eye">Eye *</label>
+                    <select id="eye" name="eye" required>
+                        <option value="">Select...</option>
+                        <option value="L">L (Left)</option>
+                        <option value="R">R (Right)</option>
+                        <option value="ND">ND (Not Determined)</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- Main Ocular Conditions Section -->
+        <div style="border-bottom: 2px solid #ecf0f1; padding-bottom: 20px; margin-bottom: 30px;">
+            <h3 style="color: #2c3e50; margin-bottom: 20px;">Main Ocular Conditions</h3>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="lens_status">Lens Status</label>
+                    <select id="lens_status" name="lens_status" onchange="handleLensStatus(this.value)">
+                        <option value="ND">ND</option>
+                        <option value="Phakic">Phakic</option>
+                        <option value="Pseudophakic">Pseudophakic</option>
+                        <option value="Aphakic">Aphakic</option>
+                    </select>
+                </div>
+
+                <div id="locs_fields" style="display: none;" class="form-group">
+                    <label>LOCS III Grade (if Phakic)</label>
+                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                        <select name="locs_no">
+                            <option value="ND">NO-ND</option>
+                            <option value="0.1">NO-0.1</option>
+                            <option value="0.3">NO-0.3</option>
+                            <option value="0.5">NO-0.5</option>
+                            <option value="1.0">NO-1.0</option>
+                            <option value="1.5">NO-1.5</option>
+                            <option value="2.0">NO-2.0</option>
+                            <option value="2.5">NO-2.5</option>
+                            <option value="3.0">NO-3.0</option>
+                            <option value="3.5">NO-3.5</option>
+                            <option value="4.0">NO-4.0</option>
+                            <option value="4.5">NO-4.5</option>
+                            <option value="5.0">NO-5.0</option>
+                            <option value="5.5">NO-5.5</option>
+                            <option value="6.0">NO-6.0</option>
+                            <option value="6.5">NO-6.5</option>
+                            <option value="6.9">NO-6.9</option>
+                        </select>
+                        <select name="locs_nc">
+                            <option value="ND">NC-ND</option>
+                            <option value="0.1">NC-0.1</option>
+                            <option value="0.3">NC-0.3</option>
+                            <!-- Add all NC values -->
+                        </select>
+                        <select name="locs_c">
+                            <option value="ND">C-ND</option>
+                            <option value="0.1">C-0.1</option>
+                            <!-- Add all C values -->
+                        </select>
+                        <select name="locs_p">
+                            <option value="ND">P-ND</option>
+                            <option value="0.1">P-0.1</option>
+                            <!-- Add all P values -->
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <p style="color: #7f8c8d; font-size: 13px; margin-top: 20px;">
+                More condition fields will be added in the next iteration...
+            </p>
+        </div>
+
+        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+            <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-success">Save Patient</button>
+        </div>
+    </form>
+</div>
+
+<script>
+let checkTimeout;
+
+function checkPatientId(id) {
+    clearTimeout(checkTimeout);
+    const statusEl = document.getElementById('id-status');
+    statusEl.style.display = 'block';
+    statusEl.textContent = 'Checking...';
+    statusEl.style.color = '#7f8c8d';
+
+    checkTimeout = setTimeout(() => {
+        fetch(`/api/check-patient-id/${id}`)
+            .then(res => res.json())
+            .then(data => {
+                if (data.available) {
+                    statusEl.textContent = '✓ ID available';
+                    statusEl.style.color = '#27ae60';
+                } else {
+                    statusEl.textContent = '✗ ID already exists';
+                    statusEl.style.color = '#e74c3c';
+                }
+            });
+    }, 500);
+}
+
+function handleLensStatus(value) {
+    const locsFields = document.getElementById('locs_fields');
+    locsFields.style.display = value === 'Phakic' ? 'block' : 'none';
+}
+</script>
+{% endblock %}
