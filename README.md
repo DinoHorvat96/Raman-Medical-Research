@@ -1,309 +1,343 @@
-# Medical Research Database Application
+# Raman Medical Research Database
 
-A secure, role-based medical database web application built with Flask and PostgreSQL.
+A comprehensive medical research database system for ophthalmic clinical data collection and analysis.
 
-## Features
+## 🎯 Project Overview
 
-- 🔐 Secure authentication with bcrypt password hashing
-- 👥 Role-based access control (Administrator, Osoblje, Pacijent)
-- 🏥 Patient management system
-- 📋 Diagnosis tracking with therapy and comments
-- 🐳 Docker-ready with nginx reverse proxy
-- 🔄 Automatic database initialization with default admin user
+Raman is a professional medical research database designed specifically for collecting and analyzing ophthalmic (eye-related) clinical data. The system features:
 
-## Database Structure
+- **Dual-table architecture** for data security (sensitive vs. statistical data)
+- **Automatic patient ID generation** starting from 1500 with manual override capability
+- **Hierarchical condition tracking** with complex parent-child relationships
+- **SHA-256 person hashing** for anonymized data analysis
+- **Multi-user support** with concurrent data entry prevention
+- **ICD-10 coding** for conditions and medications
+- **Flexible export** for statistical analysis
 
-### Tables
+## 📋 Database Architecture
 
-1. **korisnici** (Users)
-   - `id_korisnika` - Primary key (auto-increment)
-   - `korisnicko_ime` - Username (unique)
-   - `lozinka` - Hashed password
-   - `email` - Email address
-   - `rola` - Role: "Pacijent", "Osoblje", or "Administrator"
-   - `kreiran` - Creation timestamp
-   - `zadnji_login` - Last login timestamp
+### Core Tables
 
-2. **pacijenti** (Patients)
-   - `id_pacijenta` - Primary key (auto-increment)
-   - `ime` - First name
-   - `prezime` - Last name
-   - `datum_rodenja` - Date of birth
+#### 1. **users**
+Authentication and authorization
+- `user_id`, `username`, `password_hash`, `email`, `role`, `created_at`, `last_login`
 
-3. **dijagnoze** (Diagnoses)
-   - `id_dijagnoze` - Primary key (auto-increment)
-   - `id_pacijenta` - Foreign key to pacijenti
-   - `ime_dijagnoze` - Diagnosis name
-   - `terapija` - Therapy (optional text)
-   - `komentari` - Doctor's comments (optional)
-   - `datum_dijagnoze` - Diagnosis timestamp
+#### 2. **patients_sensitive** (Protected Data)
+Personal identifiable information
+- `patient_id` (1-99999, custom or auto-generated)
+- `patient_name`, `mbo` (9 digits), `date_of_birth`, `date_of_sample_collection`
 
-## Project Structure
+#### 3. **patients_statistical** (Anonymized Export Data)
+De-identified data for analysis
+- `patient_id`, `person_hash` (SHA-256 of MBO), `age` (calculated), `sex`, `eye`
 
+#### 4. **ocular_conditions**
+Main ocular conditions (one row per patient)
+- Lens status (Phakic/Pseudophakic/Aphakic) with LOCS III grading
+- IOL type and aphakia etiology
+- Glaucoma (with etiology, OHT, PAC subtypes)
+- Diabetic retinopathy (NPDR/PDR stages)
+- Macular edema, AMD, macular holes, ERM
+- Retinal detachment, vitreous hemorrhage
+- 40+ specialized ophthalmic fields
+
+#### 5. **other_ocular_conditions** (One-to-Many)
+Additional ICD-10 coded ocular conditions
+- `patient_id`, `icd10_code`, `eye`
+
+#### 6. **previous_ocular_surgeries** (One-to-Many)
+Surgical history
+- `patient_id`, `surgery_code`, `eye`
+
+#### 7. **systemic_conditions** (One-to-Many)
+Non-ocular ICD-10 conditions
+- `patient_id`, `icd10_code`
+
+#### 8. **ocular_medications** (One-to-Many)
+Eye medications with timing
+- `patient_id`, `trade_name`, `generic_name`, `eye`, `days_before_collection`
+
+#### 9. **systemic_medications** (One-to-Many)
+Systemic medications
+- `patient_id`, `trade_name`, `generic_name`, `days_before_collection`
+
+## 🚀 Getting Started
+
+### Prerequisites
+- Python 3.9+
+- PostgreSQL 13+
+- pip
+
+### Installation
+
+1. **Clone/create the project structure**:
 ```
-medical-research/
-├── app.py                 # Main Flask application
-├── requirements.txt       # Python dependencies
-├── Dockerfile            # Docker configuration
-├── docker-compose.yml    # Multi-container setup
-├── nginx.conf           # Nginx configuration
-├── .env                 # Environment variables (create from .env.example)
-├── .gitignore          # Git ignore file
-├── templates/          # HTML templates
-│   ├── base.html       # Base template
-│   ├── login.html      # Login page
-│   ├── dashboard.html  # Dashboard
-│   ├── pacijenti.html  # Patients list
-│   └── patient_detail.html  # Patient details
-└── README.md           # This file
+raman/
+├── app.py
+├── requirements.txt
+├── .env
+├── templates/
+│   ├── base.html
+│   ├── login.html
+│   ├── dashboard.html
+│   └── new_patient.html
+└── README.md
 ```
 
-## Quick Start
-
-### Option 1: Docker Compose (Recommended)
-
-1. **Clone or create the project structure** as shown above
-
-2. **Create the .env file** (optional, uses defaults if not provided):
-   ```bash
-   cp .env.example .env
-   # Edit .env with your values
-   ```
-
-3. **Start all services**:
-   ```bash
-   docker-compose up -d
-   ```
-
-4. **Access the application**:
-   - Web application: http://localhost
-   - Direct Flask access: http://localhost:5000
-   - PostgreSQL: localhost:5432
-
-5. **Default login credentials**:
-   - Username: `Admin`
-   - Password: `admin123`
-
-### Option 2: Local Development
-
-1. **Install PostgreSQL** (if not already installed)
-
-2. **Create a virtual environment**:
-   ```bash
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
-
-3. **Install dependencies**:
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Configure database** (create .env file):
-   ```
-   DB_NAME=istrazivanje_medicina
-   DB_USER=postgres
-   DB_PASSWORD=your_password
-   DB_HOST=localhost
-   DB_PORT=5432
-   SECRET_KEY=your-random-secret-key
-   ```
-
-5. **Create the database**:
-   ```bash
-   createdb istrazivanje_medicina
-   # Or via psql:
-   psql -U postgres -c "CREATE DATABASE istrazivanje_medicina;"
-   ```
-
-6. **Run the application**:
-   ```bash
-   python app.py
-   ```
-
-7. **Access**: http://localhost:5000
-
-## Docker Commands
-
-### View logs
+2. **Install dependencies**:
 ```bash
-docker-compose logs -f web      # Flask app logs
-docker-compose logs -f postgres # Database logs
-docker-compose logs -f nginx    # Nginx logs
+pip install -r requirements.txt
 ```
 
-### Restart services
+3. **Configure database** (create `.env` file):
+```env
+DB_NAME=raman_research
+DB_USER=your_username
+DB_PASSWORD=your_password
+DB_HOST=localhost
+DB_PORT=5432
+SECRET_KEY=your-random-secret-key
+```
+
+4. **Run the application**:
 ```bash
-docker-compose restart
+python app.py
 ```
 
-### Stop services
-```bash
-docker-compose down
-```
+The application will:
+- Automatically create the database if it doesn't exist
+- Initialize all tables with proper schema
+- Create default admin user (Admin/admin123)
+- Start patient ID sequence at 1500
 
-### Stop and remove volumes (WARNING: deletes all data)
-```bash
-docker-compose down -v
-```
+5. **Access the application**:
+- Open http://localhost:5000
+- Login with: `Admin` / `admin123`
 
-### Access PostgreSQL shell
-```bash
-docker exec -it medical_postgres psql -U postgres -d istrazivanje_medicina
-```
+## 🔐 Security Features
 
-### Rebuild after code changes
-```bash
-docker-compose up -d --build
-```
+### Data Protection
+- **Separate sensitive and statistical tables**: PII is isolated from analysis data
+- **Password hashing**: Bcrypt with salt
+- **Session-based authentication**: Secure user sessions
+- **Role-based access control**: Admin, Staff, Patient roles
+- **Person hashing**: SHA-256 hashing of MBO for anonymous patient tracking
 
-## Database Management
+### Future Security Enhancements
+- HTTPS/TLS encryption
+- CSRF protection
+- Audit logging
+- Data encryption at rest
+- Two-factor authentication
+- Session timeouts
+- HIPAA/GDPR compliance measures
 
-### Manual SQL Access
-
-Connect to the database:
-```bash
-# Via Docker
-docker exec -it medical_postgres psql -U postgres -d istrazivanje_medicina
-
-# Local PostgreSQL
-psql -U postgres -d istrazivanje_medicina
-```
-
-### Add Sample Data
-
-```sql
--- Add a patient
-INSERT INTO pacijenti (ime, prezime, datum_rodenja) 
-VALUES ('Marko', 'Marković', '1980-05-15');
-
--- Add a diagnosis for patient ID 1
-INSERT INTO dijagnoze (id_pacijenta, ime_dijagnoze, terapija, komentari)
-VALUES (1, 'Hipertenzija', 'Lisinopril 10mg dnevno', 'Preporučena izmjena životnog stila');
-
--- Add a new user (password: test123)
-INSERT INTO korisnici (korisnicko_ime, lozinka, email, rola)
-VALUES ('doktor1', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewY5zyorU9F/5C/O', 'doktor@example.com', 'Osoblje');
-```
-
-### View Data
-
-```sql
--- View all users
-SELECT id_korisnika, korisnicko_ime, email, rola, kreiran, zadnji_login FROM korisnici;
-
--- View all patients with diagnosis count
-SELECT p.*, COUNT(d.id_dijagnoze) as broj_dijagnoza
-FROM pacijenti p
-LEFT JOIN dijagnoze d ON p.id_pacijenta = d.id_pacijenta
-GROUP BY p.id_pacijenta;
-
--- View patient with their diagnoses
-SELECT p.ime, p.prezime, d.ime_dijagnoze, d.terapija, d.datum_dijagnoze
-FROM pacijenti p
-LEFT JOIN dijagnoze d ON p.id_pacijenta = d.id_pacijenta
-WHERE p.id_pacijenta = 1;
-```
-
-## User Roles & Access
+## 👥 User Roles
 
 ### Administrator
-- Full access to all features
-- Can view all statistics
-- Can manage all patients and diagnoses
-- Future: User management capabilities
+- Full system access
+- Import reference lists (ICD-10 codes, medications, surgeries)
+- User management
+- System configuration
+- Data export and validation
 
-### Osoblje (Staff)
-- Can view and manage patients
-- Can view and add diagnoses
-- Access to patient statistics
+### Staff
+- Create and edit patient records
+- View all patient data
+- Data entry and validation
+- Export data for analysis
 
-### Pacijent (Patient)
-- Limited access (currently in development)
-- Future: View own medical records only
+### Patient
+- View own medical records (future feature)
+- Limited read-only access
 
-## Security Considerations
+## 📊 Key Features
 
-### Current Implementation
-✅ Password hashing with bcrypt  
-✅ Session-based authentication  
-✅ Role-based access control  
-✅ SQL injection prevention (parameterized queries)  
-✅ Basic security headers in nginx  
+### Patient ID Management
+- **Auto-increment** starting from 1500 (configurable)
+- **Manual override** with duplicate detection
+- **Real-time validation** via API endpoint
+- **Concurrent entry protection** across multiple users
 
-### Recommended for Production
-⚠️ Use HTTPS/SSL certificates  
-⚠️ Implement CSRF protection  
-⚠️ Add rate limiting  
-⚠️ Enable audit logging  
-⚠️ Implement data encryption at rest  
-⚠️ Use secrets management (e.g., Docker secrets)  
-⚠️ Add session timeout  
-⚠️ Implement password complexity requirements  
-⚠️ Add two-factor authentication  
-⚠️ Regular security audits  
-⚠️ GDPR/HIPAA compliance measures  
+### Hierarchical Condition Forms
+- **Parent-child relationships**: Main conditions reveal sub-conditions
+- **Dynamic form fields**: Fields appear/hide based on selections
+- **Default values**: Most common values pre-selected (typically 0 or ND)
+- **Validation**: Ensure data consistency
 
-## Environment Variables
+### Multiple Related Records
+- **Unlimited entries**: Conditions, surgeries, medications
+- **Dynamic addition**: Add more entries via (+) button
+- **Individual tracking**: Each entry stored separately
 
-| Variable | Default | Description |
-|----------|---------|-------------|
-| DB_NAME | istrazivanje_medicina | Database name |
-| DB_USER | postgres | Database user |
-| DB_PASSWORD | postgres | Database password |
-| DB_HOST | localhost | Database host |
-| DB_PORT | 5432 | Database port |
-| SECRET_KEY | (random) | Flask secret key for sessions |
+### Data Export
+Statistical export table automatically includes:
+- De-identified patient data (person_hash instead of name/MBO)
+- Calculated age at sample collection
+- All ocular and systemic conditions
+- Medication history with timing
+- Surgical history
 
-## Troubleshooting
+## 🔄 Workflow
 
-### Database connection error
-- Ensure PostgreSQL is running
-- Check database credentials in .env
-- Verify network connectivity (for Docker: ensure containers are on same network)
+### Adding a New Patient
 
-### Port already in use
-```bash
-# Change ports in docker-compose.yml
-ports:
-  - "8080:80"    # Change from 80 to 8080
-  - "5001:5000"  # Change from 5000 to 5001
+1. **Dashboard** → Click "New Patient"
+2. **General Data**:
+   - Patient ID auto-populated (editable)
+   - Enter name, MBO, sex
+   - Enter dates (DOB, sample collection)
+   - Select eye (L/R/ND)
+
+3. **Main Ocular Conditions**:
+   - Select lens status → Sub-fields appear
+   - Complete LOCS III grading (if Phakic)
+   - Fill glaucoma details (if applicable)
+   - Document retinopathy, AMD, etc.
+
+4. **Additional Conditions** (repeatable):
+   - Add ICD-10 coded conditions
+   - Specify affected eye
+   - Click (+) to add more
+
+5. **Previous Surgeries** (repeatable):
+   - Select from surgery list
+   - Specify eye
+   - Add multiple entries
+
+6. **Medications** (repeatable):
+   - Select from medication list
+   - Enter days before collection
+   - Specify eye (for ocular meds)
+
+7. **Save** → Data distributed across multiple tables
+
+### Validating/Editing Existing Data
+
+1. **Dashboard** → Click "Validate Data"
+2. Search for patient by ID or name
+3. Edit form (same as New Patient)
+4. All existing data pre-filled
+5. Save updates
+
+### Exporting Data
+
+1. **Dashboard** → Click "Export Data"
+2. Select date range, conditions, or custom filters
+3. Choose export format (CSV, Excel)
+4. Statistical table exported (anonymized)
+
+## 🗂️ ICD-10 and Reference Lists
+
+### Importing Reference Lists
+Administrators can import:
+- **ICD-10 codes**: Ocular and systemic conditions
+- **Medication lists**: HALMED registry (trade names + generics)
+- **Surgery codes**: Standard ophthalmic procedures
+
+### Data Structure
+Reference lists stored with:
+- Code/ID
+- Description
+- Category
+- Active status
+
+Updates to reference lists don't affect existing patient data.
+
+## 📈 Current Implementation Status
+
+### ✅ Completed
+- Database schema with all tables
+- User authentication system
+- Dashboard with main actions
+- Patient ID generation and validation
+- Basic new patient form
+- Security measures (password hashing, sessions)
+
+### 🚧 In Progress
+- Complete new patient form (all condition fields)
+- Dynamic form field showing/hiding
+- Multiple entry addition (+) buttons
+- Reference list management
+
+### 📋 Planned
+- Patient search and editing
+- Data validation interface
+- Export functionality
+- Reference list import
+- Advanced filtering and reporting
+- User management interface
+
+## 🛠️ Technical Stack
+
+- **Backend**: Python 3.9+, Flask 3.0
+- **Database**: PostgreSQL 15+
+- **Authentication**: Flask-Bcrypt
+- **Frontend**: HTML5, CSS3, Vanilla JavaScript
+- **Deployment**: Docker, Nginx
+
+## 🐳 Docker Deployment
+
+See `docker-compose.yml` for complete setup with:
+- PostgreSQL container
+- Flask application container
+- Nginx reverse proxy
+- Persistent data volumes
+
+## 📝 Development Notes
+
+### Adding New Condition Fields
+
+1. Add column to `ocular_conditions` table
+2. Add form field in `new_patient.html`
+3. Add JavaScript for conditional display (if hierarchical)
+4. Update form processing in `app.py`
+
+### Database Migrations
+
+For schema changes:
+```sql
+-- Example: Add new column
+ALTER TABLE ocular_conditions 
+ADD COLUMN new_field VARCHAR(50);
 ```
 
-### Templates not found
-- Ensure all HTML files are in `templates/` directory
-- Check file names match exactly (case-sensitive)
-
-### Permission denied errors
+### Testing
 ```bash
-# Fix Docker permissions
-sudo chown -R $USER:$USER .
+# Run with debug mode
+python app.py
+
+# Check logs for errors
+# Test with multiple concurrent users
 ```
 
-## Future Enhancements
+## 🤝 Contributing
 
-- [ ] Patient registration and self-service portal
-- [ ] Advanced search and filtering
-- [ ] Medical report generation (PDF)
-- [ ] Appointment scheduling system
-- [ ] Medication tracking
-- [ ] Lab results integration
-- [ ] Multi-language support
-- [ ] Mobile-responsive design improvements
-- [ ] Data export functionality (CSV, Excel)
-- [ ] Audit trail for all actions
-- [ ] Email notifications
-- [ ] User management interface for admins
-- [ ] Advanced analytics and reporting
-- [ ] Integration with medical devices/APIs
+This is a private medical research project. Contributions should follow:
+1. Medical data handling best practices
+2. HIPAA/GDPR compliance guidelines
+3. Code review process
+4. Testing requirements
 
-## Support
+## 📄 License
 
-For issues or questions:
-1. Check the troubleshooting section
-2. Review Docker/PostgreSQL logs
-3. Ensure all dependencies are installed correctly
+Private medical research project. All rights reserved.
 
-## License
+## 🆘 Support
 
-This is a private medical research project. Ensure compliance with all relevant healthcare data regulations (HIPAA, GDPR, etc.) before deployment.
+For technical issues:
+1. Check database connection
+2. Verify .env configuration
+3. Review application logs
+4. Check PostgreSQL logs
+
+## 🔮 Future Enhancements
+
+- Mobile application for data entry
+- Real-time collaboration features
+- Advanced statistical analysis tools
+- Integration with lab systems
+- Automated report generation
+- Machine learning predictions
+- Multi-language support
+- Cloud deployment options
