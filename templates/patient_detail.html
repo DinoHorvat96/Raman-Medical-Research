@@ -1,0 +1,45 @@
+<!-- templates/patient_detail.html -->
+{% extends "base.html" %}
+
+{% block title %}{{ patient.ime }} {{ patient.prezime }}{% endblock %}
+
+{% block content %}
+<div class="card">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+        <h2>{{ patient.ime }} {{ patient.prezime }}</h2>
+        <a href="{{ url_for('pacijenti') }}" class="btn btn-secondary">Natrag</a>
+    </div>
+
+    <div style="background: #f8f9fa; padding: 20px; border-radius: 5px; margin-bottom: 30px;">
+        <p><strong>ID Pacijenta:</strong> {{ patient.id_pacijenta }}</p>
+        <p><strong>Datum rođenja:</strong> {{ patient.datum_rodenja }}</p>
+    </div>
+
+    <h3 style="margin-bottom: 15px;">Dijagnoze</h3>
+
+    {% if diagnoses %}
+    <table>
+        <thead>
+            <tr>
+                <th>Datum</th>
+                <th>Dijagnoza</th>
+                <th>Terapija</th>
+                <th>Komentari</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for diagnosis in diagnoses %}
+            <tr>
+                <td>{{ diagnosis.datum_dijagnoze.strftime('%d.%m.%Y %H:%M') if diagnosis.datum_dijagnoze else 'N/A' }}</td>
+                <td><strong>{{ diagnosis.ime_dijagnoze }}</strong></td>
+                <td>{{ diagnosis.terapija or 'N/A' }}</td>
+                <td>{{ diagnosis.komentari or 'N/A' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <p style="text-align: center; color: #666; margin-top: 20px;">Nema zabilježenih dijagnoza za ovog pacijenta.</p>
+    {% endif %}
+</div>
+{% endblock %}

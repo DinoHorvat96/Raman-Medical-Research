@@ -1,0 +1,41 @@
+<!-- templates/dashboard.html -->
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="card">
+    <h2>Dobrodošli, {{ username }}!</h2>
+    <p style="color: #666; margin-top: 10px;">Vaša rola: <strong>{{ role }}</strong></p>
+
+    {% if role in ['Administrator', 'Osoblje'] %}
+    <div class="nav-links">
+        <a href="{{ url_for('pacijenti') }}" class="btn btn-primary">Pregled Pacijenata</a>
+    </div>
+
+    {% if stats %}
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h3>{{ stats.total_patients or 0 }}</h3>
+            <p>Ukupno pacijenata</p>
+        </div>
+        <div class="stat-card">
+            <h3>{{ stats.total_diagnoses or 0 }}</h3>
+            <p>Ukupno dijagnoza</p>
+        </div>
+        {% if role == 'Administrator' and stats.total_users %}
+        <div class="stat-card">
+            <h3>{{ stats.total_users }}</h3>
+            <p>Ukupno korisnika</p>
+        </div>
+        {% endif %}
+    </div>
+    {% endif %}
+
+    {% elif role == 'Pacijent' %}
+    <p style="margin-top: 20px; color: #666;">
+        Pacijent panel trenutno u razvoju. Ovdje će biti prikazane vaše dijagnoze i povijest liječenja.
+    </p>
+    {% endif %}
+</div>
+{% endblock %}
