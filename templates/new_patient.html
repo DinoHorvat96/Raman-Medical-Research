@@ -4,6 +4,118 @@
 {% block title %}New Patient - Raman{% endblock %}
 
 {% block content %}
+<style>
+    .section-divider {
+        border-bottom: 2px solid #ecf0f1;
+        padding-bottom: 30px;
+        margin-bottom: 30px;
+    }
+
+    .section-title {
+        color: #2c3e50;
+        font-size: 18px;
+        font-weight: 600;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 1px solid #ecf0f1;
+    }
+
+    .subsection {
+        background: #f8f9fa;
+        padding: 20px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        border-left: 4px solid #3498db;
+    }
+
+    .field-group {
+        display: flex;
+        gap: 15px;
+        align-items: flex-start;
+    }
+
+    .field-group > * {
+        flex: 1;
+    }
+
+    .conditional-field {
+        display: none;
+        margin-top: 15px;
+        padding-left: 20px;
+        border-left: 3px solid #95a5a6;
+    }
+
+    .conditional-field.active {
+        display: block;
+    }
+
+    .add-more-btn {
+        padding: 8px 16px;
+        background: #27ae60;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+        margin-top: 10px;
+    }
+
+    .add-more-btn:hover {
+        background: #229954;
+    }
+
+    .remove-btn {
+        padding: 6px 12px;
+        background: #e74c3c;
+        color: white;
+        border: none;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 12px;
+    }
+
+    .remove-btn:hover {
+        background: #c0392b;
+    }
+
+    .repeatable-item {
+        background: white;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        border: 1px solid #ddd;
+        position: relative;
+    }
+
+    .date-input-group {
+        display: grid;
+        grid-template-columns: 1fr 1fr 2fr;
+        gap: 10px;
+    }
+
+    .form-help {
+        font-size: 12px;
+        color: #7f8c8d;
+        margin-top: 5px;
+    }
+
+    .locs-grid {
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 10px;
+    }
+
+    select, input {
+        font-size: 13px;
+    }
+
+    .id-check {
+        display: none;
+        margin-top: 5px;
+        font-size: 13px;
+    }
+</style>
+
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
         <h2>New Patient Entry</h2>
@@ -11,17 +123,20 @@
     </div>
 
     <form method="POST" id="patientForm">
-        <!-- General Data Section -->
-        <div style="border-bottom: 2px solid #ecf0f1; padding-bottom: 20px; margin-bottom: 30px;">
-            <h3 style="color: #2c3e50; margin-bottom: 20px;">General Data</h3>
 
-            <div class="form-group">
-                <label for="patient_id">Patient ID *</label>
-                <input type="number" id="patient_id" name="patient_id"
-                       value="{{ next_patient_id }}"
-                       min="1" max="99999" required
-                       onchange="checkPatientId(this.value)">
-                <small id="id-status" style="display: none; margin-top: 5px;"></small>
+        <!-- ========== GENERAL DATA ========== -->
+        <div class="section-divider">
+            <h3 class="section-title">General Data</h3>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="patient_id">Patient ID *</label>
+                    <input type="number" id="patient_id" name="patient_id"
+                           value="{{ next_patient_id }}"
+                           min="1" max="99999" required
+                           onchange="checkPatientId(this.value)">
+                    <small id="id-status" class="id-check"></small>
+                </div>
             </div>
 
             <div class="form-row">
@@ -36,14 +151,15 @@
                     <input type="text" id="mbo" name="mbo" required
                            pattern="[0-9]{9}" maxlength="9"
                            placeholder="123456789">
+                    <small class="form-help">Used to generate anonymous person hash</small>
                 </div>
 
                 <div class="form-group">
                     <label for="sex">Sex *</label>
                     <select id="sex" name="sex" required>
                         <option value="">Select...</option>
-                        <option value="M">M (Male)</option>
-                        <option value="F">F (Female)</option>
+                        <option value="M">M</option>
+                        <option value="F">F</option>
                     </select>
                 </div>
             </div>
@@ -51,7 +167,7 @@
             <div class="form-row">
                 <div class="form-group">
                     <label>Date of Birth *</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 10px;">
+                    <div class="date-input-group">
                         <input type="number" name="dob_day" placeholder="DD" min="1" max="31" required>
                         <input type="number" name="dob_month" placeholder="MM" min="1" max="12" required>
                         <input type="number" name="dob_year" placeholder="YYYY" min="1900" max="2100" required>
@@ -60,7 +176,7 @@
 
                 <div class="form-group">
                     <label>Date of Sample Collection *</label>
-                    <div style="display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 10px;">
+                    <div class="date-input-group">
                         <input type="number" name="collection_day" placeholder="DD" min="1" max="31" required>
                         <input type="number" name="collection_month" placeholder="MM" min="1" max="12" required>
                         <input type="number" name="collection_year" placeholder="YYYY" min="1900" max="2100" required>
@@ -71,34 +187,37 @@
                     <label for="eye">Eye *</label>
                     <select id="eye" name="eye" required>
                         <option value="">Select...</option>
-                        <option value="L">L (Left)</option>
-                        <option value="R">R (Right)</option>
-                        <option value="ND">ND (Not Determined)</option>
+                        <option value="L">L</option>
+                        <option value="R">R</option>
+                        <option value="ND" selected>ND</option>
                     </select>
                 </div>
             </div>
         </div>
 
-        <!-- Main Ocular Conditions Section -->
-        <div style="border-bottom: 2px solid #ecf0f1; padding-bottom: 20px; margin-bottom: 30px;">
-            <h3 style="color: #2c3e50; margin-bottom: 20px;">Main Ocular Conditions</h3>
+        <!-- ========== MAIN OCULAR CONDITIONS ========== -->
+        <div class="section-divider">
+            <h3 class="section-title">Main Ocular Conditions</h3>
 
-            <div class="form-row">
-                <div class="form-group">
-                    <label for="lens_status">Lens Status</label>
-                    <select id="lens_status" name="lens_status" onchange="handleLensStatus(this.value)">
-                        <option value="ND">ND</option>
-                        <option value="Phakic">Phakic</option>
-                        <option value="Pseudophakic">Pseudophakic</option>
-                        <option value="Aphakic">Aphakic</option>
-                    </select>
+            <!-- Lens Status -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="lens_status">Lens Status</label>
+                        <select id="lens_status" name="lens_status" onchange="handleLensStatus(this.value)">
+                            <option value="ND" selected>ND</option>
+                            <option value="Phakic">Phakic</option>
+                            <option value="Pseudophakic">Pseudophakic</option>
+                            <option value="Aphakic">Aphakic</option>
+                        </select>
+                    </div>
                 </div>
 
-                <div id="locs_fields" style="display: none;" class="form-group">
+                <div id="locs_fields" class="conditional-field">
                     <label>LOCS III Grade (if Phakic)</label>
-                    <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px;">
+                    <div class="locs-grid">
                         <select name="locs_no">
-                            <option value="ND">NO-ND</option>
+                            <option value="ND" selected>NO-ND</option>
                             <option value="0.1">NO-0.1</option>
                             <option value="0.3">NO-0.3</option>
                             <option value="0.5">NO-0.5</option>
@@ -117,31 +236,774 @@
                             <option value="6.9">NO-6.9</option>
                         </select>
                         <select name="locs_nc">
-                            <option value="ND">NC-ND</option>
+                            <option value="ND" selected>NC-ND</option>
                             <option value="0.1">NC-0.1</option>
                             <option value="0.3">NC-0.3</option>
-                            <!-- Add all NC values -->
+                            <option value="0.5">NC-0.5</option>
+                            <option value="1.0">NC-1.0</option>
+                            <option value="1.5">NC-1.5</option>
+                            <option value="2.0">NC-2.0</option>
+                            <option value="2.5">NC-2.5</option>
+                            <option value="3.0">NC-3.0</option>
+                            <option value="3.5">NC-3.5</option>
+                            <option value="4.0">NC-4.0</option>
+                            <option value="4.5">NC-4.5</option>
+                            <option value="5.0">NC-5.0</option>
+                            <option value="5.5">NC-5.5</option>
+                            <option value="6.0">NC-6.0</option>
+                            <option value="6.5">NC-6.5</option>
+                            <option value="6.9">NC-6.9</option>
                         </select>
                         <select name="locs_c">
-                            <option value="ND">C-ND</option>
+                            <option value="ND" selected>C-ND</option>
                             <option value="0.1">C-0.1</option>
-                            <!-- Add all C values -->
+                            <option value="0.3">C-0.3</option>
+                            <option value="0.5">C-0.5</option>
+                            <option value="1.0">C-1.0</option>
+                            <option value="1.5">C-1.5</option>
+                            <option value="2.0">C-2.0</option>
+                            <option value="2.5">C-2.5</option>
+                            <option value="3.0">C-3.0</option>
+                            <option value="3.5">C-3.5</option>
+                            <option value="4.0">C-4.0</option>
+                            <option value="4.5">C-4.5</option>
+                            <option value="5.0">C-5.0</option>
+                            <option value="5.5">C-5.5</option>
+                            <option value="5.9">C-5.9</option>
                         </select>
                         <select name="locs_p">
-                            <option value="ND">P-ND</option>
+                            <option value="ND" selected>P-ND</option>
                             <option value="0.1">P-0.1</option>
-                            <!-- Add all P values -->
+                            <option value="0.3">P-0.3</option>
+                            <option value="0.5">P-0.5</option>
+                            <option value="1.0">P-1.0</option>
+                            <option value="1.5">P-1.5</option>
+                            <option value="2.0">P-2.0</option>
+                            <option value="2.5">P-2.5</option>
+                            <option value="3.0">P-3.0</option>
+                            <option value="3.5">P-3.5</option>
+                            <option value="4.0">P-4.0</option>
+                            <option value="4.5">P-4.5</option>
+                            <option value="5.0">P-5.0</option>
+                            <option value="5.5">P-5.5</option>
+                            <option value="5.9">P-5.9</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="iol_fields" class="conditional-field">
+                    <div class="form-group">
+                        <label for="iol_type">IOL Type (if Pseudophakic)</label>
+                        <select name="iol_type">
+                            <option value="ND" selected>ND</option>
+                            <option value="AC IOL">AC IOL (anterior chamber)</option>
+                            <option value="IF IOL">IF IOL (iris-fixated)</option>
+                            <option value="SF IOL">SF IOL (sclera-fixated)</option>
+                            <option value="CS IOL">CS IOL (ciliary sulcus)</option>
+                            <option value="PC IOL">PC IOL (posterior chamber in-the-bag)</option>
+                            <option value="PIOL">PIOL (phakic IOL)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="aphakia_fields" class="conditional-field">
+                    <div class="form-group">
+                        <label for="aphakia_etiology">Etiology (if Aphakic)</label>
+                        <select name="aphakia_etiology">
+                            <option value="ND" selected>ND</option>
+                            <option value="Congenital">Congenital</option>
+                            <option value="Acquired">Acquired</option>
                         </select>
                     </div>
                 </div>
             </div>
 
-            <p style="color: #7f8c8d; font-size: 13px; margin-top: 20px;">
-                More condition fields will be added in the next iteration...
-            </p>
+            <!-- Glaucoma -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="glaucoma">Glaucoma</label>
+                        <select id="glaucoma" name="glaucoma" onchange="handleGlaucoma(this.value)">
+                            <option value="0" selected>0</option>
+                            <option value="1">1</option>
+                            <option value="ND">ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="oht_pac_fields" class="conditional-field">
+                    <div class="form-group">
+                        <label for="oht_or_pac">OHT or PAC (if Glaucoma = 0)</label>
+                        <select name="oht_or_pac">
+                            <option value="0" selected>0</option>
+                            <option value="OHT">OHT (Ocular Hypertension)</option>
+                            <option value="PAC">PAC (Primary Angle Closure)</option>
+                            <option value="ND">ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="glaucoma_etiology_fields" class="conditional-field">
+                    <div class="form-group">
+                        <label for="glaucoma_etiology">Etiology (if Glaucoma = 1)</label>
+                        <select name="glaucoma_etiology">
+                            <option value="ND" selected>ND</option>
+                            <option value="POAG">POAG (primary open angle)</option>
+                            <option value="NTG">NTG (normal tension)</option>
+                            <option value="PCG">PCG (primary congenital)</option>
+                            <option value="JOAG">JOAG (juvenile open angle)</option>
+                            <option value="PACG">PACG (primary angle closure)</option>
+                            <option value="PXG">PXG (pseudoexfoliation)</option>
+                            <option value="PG">PG (pigmentary)</option>
+                            <option value="NVG">NVG (neovascular)</option>
+                            <option value="UG">UG (uveitic)</option>
+                            <option value="TG">TG (traumatic)</option>
+                            <option value="SOG">SOG (silicone oil)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Steroid Responder, PXS, PDS -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="steroid_responder">Steroid Responder</label>
+                    <select name="steroid_responder">
+                        <option value="0" selected>0</option>
+                        <option value="1">1</option>
+                        <option value="ND">ND</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="pxs">PXS (Pseudoexfoliation Syndrome)</label>
+                    <select name="pxs">
+                        <option value="0" selected>0</option>
+                        <option value="1">1</option>
+                        <option value="ND">ND</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="pds">PDS (Pigment Dispersion Syndrome)</label>
+                    <select name="pds">
+                        <option value="0" selected>0</option>
+                        <option value="1">1</option>
+                        <option value="ND">ND</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- Diabetic Retinopathy -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="diabetic_retinopathy">Diabetic Retinopathy</label>
+                        <select id="diabetic_retinopathy" name="diabetic_retinopathy" onchange="handleDR(this.value)">
+                            <option value="0" selected>0</option>
+                            <option value="1">1</option>
+                            <option value="ND">ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="dr_stage_fields" class="conditional-field">
+                    <div class="form-group">
+                        <label for="dr_stage">Stage (Diabetic Retinopathy)</label>
+                        <select id="dr_stage" name="dr_stage" onchange="handleDRStage(this.value)">
+                            <option value="ND" selected>ND</option>
+                            <option value="NPDR">NPDR (nonproliferative)</option>
+                            <option value="PDR">PDR (proliferative)</option>
+                        </select>
+                    </div>
+
+                    <div id="npdr_stage_fields" class="conditional-field">
+                        <div class="form-group">
+                            <label for="npdr_stage">Stage (NPDR)</label>
+                            <select name="npdr_stage">
+                                <option value="ND" selected>ND</option>
+                                <option value="Mild">Mild</option>
+                                <option value="Moderate">Moderate</option>
+                                <option value="Severe">Severe</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="pdr_stage_fields" class="conditional-field">
+                        <div class="form-group">
+                            <label for="pdr_stage">Stage (PDR)</label>
+                            <select name="pdr_stage">
+                                <option value="ND" selected>ND</option>
+                                <option value="Active">Active</option>
+                                <option value="Inactive">Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Macular Edema -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="macular_edema">Macular Edema</label>
+                        <select id="macular_edema" name="macular_edema" onchange="handleME(this.value)">
+                            <option value="0" selected>0</option>
+                            <option value="1">1</option>
+                            <option value="ND">ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="me_etiology_fields" class="conditional-field">
+                    <div class="form-group">
+                        <label for="me_etiology">Etiology (Macular Edema)</label>
+                        <select name="me_etiology">
+                            <option value="ND" selected>ND</option>
+                            <option value="DME">DME (diabetic macular edema)</option>
+                            <option value="RVO-ME">RVO-ME (retinal vein occlusion edema)</option>
+                            <option value="IGS">IGS (Irvine-Gass syndrome / pseudophakic CME)</option>
+                            <option value="UME">UME (uveitic macular edema)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Macular Degeneration/Dystrophy -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="macular_degeneration">Macular Degeneration/Dystrophy</label>
+                        <select id="macular_degeneration" name="macular_degeneration" onchange="handleMD(this.value)">
+                            <option value="0" selected>0</option>
+                            <option value="1">1</option>
+                            <option value="ND">ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="md_etiology_fields" class="conditional-field">
+                    <div class="form-group">
+                        <label for="md_etiology">Etiology</label>
+                        <select id="md_etiology" name="md_etiology" onchange="handleMDEtiology(this.value)">
+                            <option value="ND" selected>ND</option>
+                            <option value="AMD">AMD</option>
+                            <option value="Other">Other</option>
+                        </select>
+                    </div>
+
+                    <div id="amd_stage_fields" class="conditional-field">
+                        <div class="form-group">
+                            <label for="amd_stage">Stage (AMD)</label>
+                            <select id="amd_stage" name="amd_stage" onchange="handleAMDStage(this.value)">
+                                <option value="ND" selected>ND</option>
+                                <option value="Early">Early</option>
+                                <option value="Intermediate">Intermediate</option>
+                                <option value="nAMD">nAMD (neovascular)</option>
+                                <option value="GA">GA (geographic atrophy)</option>
+                                <option value="nAMD+GA">nAMD+GA (neovascular with atrophy)</option>
+                            </select>
+                        </div>
+
+                        <div id="amd_exudation_fields" class="conditional-field">
+                            <div class="form-group">
+                                <label for="amd_exudation">Exudation (AMD)</label>
+                                <select name="amd_exudation">
+                                    <option value="0" selected>0</option>
+                                    <option value="1">1</option>
+                                    <option value="ND">ND</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="other_md_stage_fields" class="conditional-field">
+                        <div class="form-group">
+                            <label for="other_md_stage">Stage (Other Macular Degeneration/Dystrophy)</label>
+                            <select id="other_md_stage" name="other_md_stage" onchange="handleOtherMDStage(this.value)">
+                                <option value="ND" selected>ND</option>
+                                <option value="Non-neovascular">Non-neovascular</option>
+                                <option value="Neovascular">Neovascular</option>
+                            </select>
+                        </div>
+
+                        <div id="other_md_exudation_fields" class="conditional-field">
+                            <div class="form-group">
+                                <label for="other_md_exudation">Exudation (Other Macular Degeneration/Dystrophy)</label>
+                                <select name="other_md_exudation">
+                                    <option value="0" selected>0</option>
+                                    <option value="1">1</option>
+                                    <option value="ND">ND</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Macular Hole / Vitreomacular Traction -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="mh_vmt">Macular Hole / Vitreomacular Traction</label>
+                        <select id="mh_vmt" name="mh_vmt" onchange="handleMHVMT(this.value)">
+                            <option value="0" selected>0</option>
+                            <option value="1">1</option>
+                            <option value="ND">ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="mh_vmt_fields" class="conditional-field">
+                    <div class="form-group">
+                        <label for="mh_vmt_etiology">Etiology (MH/VMT)</label>
+                        <select id="mh_vmt_etiology" name="mh_vmt_etiology" onchange="handleMHVMTEtiology(this.value)">
+                            <option value="ND" selected>ND</option>
+                            <option value="Idiopathic">Idiopathic</option>
+                            <option value="Secondary">Secondary</option>
+                        </select>
+                    </div>
+
+                    <div id="secondary_mh_vmt_fields" class="conditional-field">
+                        <div class="form-group">
+                            <label for="secondary_mh_vmt_cause">Cause (Secondary MH/VMT)</label>
+                            <select name="secondary_mh_vmt_cause">
+                                <option value="ND" selected>ND</option>
+                                <option value="MTM">MTM (myopic traction maculopathy)</option>
+                                <option value="Retinal detachment">Retinal detachment (rhegmatogenous or tractional)</option>
+                                <option value="Ocular trauma or surgery">Ocular trauma or surgery (mechanical or laser trauma, surgery unrelated to MTM or retinal detachment)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="mh_vmt_treatment_status">Treatment Status Prior to Sample Collection (MH/VMT)</label>
+                        <select name="mh_vmt_treatment_status">
+                            <option value="ND" selected>ND</option>
+                            <option value="Untreated">Untreated</option>
+                            <option value="Treated-persistent/recurrent">Treated - persistent/recurrent</option>
+                            <option value="Treated-closed">Treated - closed</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Epiretinal Membrane -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="epiretinal_membrane">Epiretinal Membrane</label>
+                        <select id="epiretinal_membrane" name="epiretinal_membrane" onchange="handleERM(this.value)">
+                            <option value="0" selected>0</option>
+                            <option value="1">1</option>
+                            <option value="ND">ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="erm_fields" class="conditional-field">
+                    <div class="form-group">
+                        <label for="erm_etiology">Etiology (ERM)</label>
+                        <select id="erm_etiology" name="erm_etiology" onchange="handleERMEtiology(this.value)">
+                            <option value="ND" selected>ND</option>
+                            <option value="Idiopathic">Idiopathic</option>
+                            <option value="Secondary">Secondary</option>
+                        </select>
+                    </div>
+
+                    <div id="secondary_erm_fields" class="conditional-field">
+                        <div class="form-group">
+                            <label for="secondary_erm_cause">Cause (Secondary ERM)</label>
+                            <select name="secondary_erm_cause">
+                                <option value="ND" selected>ND</option>
+                                <option value="DR">DR (diabetic retinopathy)</option>
+                                <option value="RVO">RVO (retinal vein occlusion)</option>
+                                <option value="Intraocular inflammation">Intraocular inflammation (uveitis, endophthalmitis)</option>
+                                <option value="MTM">MTM (myopic traction maculopathy)</option>
+                                <option value="Retinal tear">Retinal tear</option>
+                                <option value="RD/PVR">RD/PVR (retinal detachment associated ERM)</option>
+                                <option value="Ocular trauma or surgery">Ocular trauma or surgery (surgery unrelated to DR, RVO, uveitis/endophthalmitis, MTM, retinal tear or RD/PVR)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="erm_treatment_status">Treatment Status Prior to Sample Collection (ERM)</label>
+                        <select name="erm_treatment_status">
+                            <option value="ND" selected>ND</option>
+                            <option value="Untreated">Untreated</option>
+                            <option value="Treated-recurrent">Treated - recurrent</option>
+                            <option value="Treated-removed">Treated - removed</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Retinal Detachment/Redetachment -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="retinal_detachment">Retinal Detachment/Redetachment</label>
+                        <select id="retinal_detachment" name="retinal_detachment" onchange="handleRD(this.value)">
+                            <option value="0" selected>0</option>
+                            <option value="Current detachment">Current detachment</option>
+                            <option value="Current redetachment">Current redetachment</option>
+                            <option value="Previous detachment">Previous detachment</option>
+                            <option value="Previous redetachment">Previous redetachment</option>
+                            <option value="ND">ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="rd_fields" class="conditional-field">
+                    <div class="form-group">
+                        <label for="rd_etiology">Etiology (RD)</label>
+                        <select name="rd_etiology">
+                            <option value="ND" selected>ND</option>
+                            <option value="Rhegmatogenous">Rhegmatogenous</option>
+                            <option value="Tractional">Tractional</option>
+                            <option value="Combined">Combined (tractional–rhegmatogenous)</option>
+                            <option value="Serous/Exudative">Serous/Exudative</option>
+                            <option value="Haemorrhagic">Haemorrhagic</option>
+                            <option value="MTM">MTM (myopic traction maculopathy)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rd_treatment_status">Treatment Status Prior to Sample Collection (RD)</label>
+                        <select name="rd_treatment_status">
+                            <option value="ND" selected>ND</option>
+                            <option value="Untreated">Untreated</option>
+                            <option value="Treated (PPV + oil tamponade)">Treated (PPV + oil tamponade)</option>
+                            <option value="Treated (PPV + gas tamponade)">Treated (PPV + gas tamponade)</option>
+                            <option value="Treated (pneumoretinopexy)">Treated (pneumoretinopexy)</option>
+                            <option value="Treated (other procedures)">Treated (other procedures)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pvr">PVR</label>
+                        <select name="pvr">
+                            <option value="0" selected>0</option>
+                            <option value="1">1</option>
+                            <option value="ND">ND</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vitreous Haemorrhage / Other Vitreous Opacification -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="vitreous_opacification">Vitreous Haemorrhage / Other Vitreous Opacification</label>
+                        <select id="vitreous_opacification" name="vitreous_opacification" onchange="handleVO(this.value)">
+                            <option value="0" selected>0</option>
+                            <option value="Vitreous haemorrhage">Vitreous haemorrhage</option>
+                            <option value="Synchisis scintillans">Synchisis scintillans</option>
+                            <option value="Asteroid hyalosis">Asteroid hyalosis</option>
+                            <option value="Vitritis">Vitritis</option>
+                            <option value="Vitreoretinal lymphoma">Vitreoretinal lymphoma</option>
+                            <option value="Endophthalmitis">Endophthalmitis</option>
+                            <option value="ND">ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="vh_etiology_fields" class="conditional-field">
+                    <div class="form-group">
+                        <label for="vh_etiology">Etiology (Vitreous Haemorrhage)</label>
+                        <select name="vh_etiology">
+                            <option value="ND" selected>ND</option>
+                            <option value="PDR">PDR</option>
+                            <option value="RVO">RVO</option>
+                            <option value="nAMD">nAMD</option>
+                            <option value="Retinal tear / Retinal detachment">Retinal tear / Retinal detachment</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
         </div>
 
-        <div style="display: flex; gap: 10px; justify-content: flex-end;">
+        <!-- ========== OTHER OCULAR CONDITIONS (ICD-10) ========== -->
+        <div class="section-divider">
+            <h3 class="section-title">Other Ocular Conditions (ICD-10)</h3>
+
+            <div id="other_ocular_conditions_container">
+                <div class="repeatable-item">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>ICD-10 Code</label>
+                            <select name="other_ocular_condition[]">
+                                <option value="0" selected>0</option>
+                                <option value="ND">ND</option>
+                                <option value="H00">H00 - Hordeolum and chalazion</option>
+                                <option value="H01">H01 - Other inflammation of eyelid</option>
+                                <option value="H02">H02 - Other disorders of eyelid</option>
+                                <option value="H04">H04 - Disorders of lacrimal system</option>
+                                <option value="H05">H05 - Disorders of orbit</option>
+                                <option value="H10">H10 - Conjunctivitis</option>
+                                <option value="H11">H11 - Other disorders of conjunctiva</option>
+                                <option value="H15">H15 - Disorders of sclera</option>
+                                <option value="H16">H16 - Keratitis</option>
+                                <option value="H17">H17 - Corneal scars and opacities</option>
+                                <option value="H18">H18 - Other disorders of cornea</option>
+                                <option value="H20">H20 - Iridocyclitis</option>
+                                <option value="H21">H21 - Other disorders of iris and ciliary body</option>
+                                <option value="H25">H25 - Senile cataract</option>
+                                <option value="H26">H26 - Other cataract</option>
+                                <option value="H27">H27 - Other disorders of lens</option>
+                                <option value="H30">H30 - Chorioretinal inflammation</option>
+                                <option value="H31">H31 - Other disorders of choroid</option>
+                                <option value="H33">H33 - Retinal detachments and breaks</option>
+                                <option value="H34">H34 - Retinal vascular occlusions</option>
+                                <option value="H35">H35 - Other retinal disorders</option>
+                                <option value="H36">H36 - Retinal disorders in diseases classified elsewhere</option>
+                                <option value="H40">H40 - Glaucoma</option>
+                                <option value="H43">H43 - Disorders of vitreous body</option>
+                                <option value="H44">H44 - Disorders of globe</option>
+                                <option value="H46">H46 - Optic neuritis</option>
+                                <option value="H47">H47 - Other disorders of optic nerve and visual pathways</option>
+                                <option value="H49">H49 - Paralytic strabismus</option>
+                                <option value="H50">H50 - Other strabismus</option>
+                                <option value="H52">H52 - Disorders of refraction and accommodation</option>
+                                <option value="H53">H53 - Visual disturbances</option>
+                                <option value="H54">H54 - Blindness and low vision</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Eye</label>
+                            <select name="other_ocular_condition_eye[]">
+                                <option value="ND" selected>ND</option>
+                                <option value="R">R</option>
+                                <option value="L">L</option>
+                                <option value="R+L">R+L</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" class="add-more-btn" onclick="addOtherOcularCondition()">+ Add Another Condition</button>
+        </div>
+
+        <!-- ========== PREVIOUS OCULAR SURGERY OR LASER TREATMENT ========== -->
+        <div class="section-divider">
+            <h3 class="section-title">Previous Ocular Surgery or Laser Treatment</h3>
+
+            <div id="previous_surgeries_container">
+                <div class="repeatable-item">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Surgery/Procedure</label>
+                            <select name="previous_surgery[]">
+                                <option value="0" selected>0</option>
+                                <option value="ND">ND</option>
+                                <option value="PPV">PPV (Pars plana vitrectomy)</option>
+                                <option value="Cataract surgery">Cataract surgery (phacoemulsification)</option>
+                                <option value="ECCE">ECCE (Extracapsular cataract extraction)</option>
+                                <option value="ICCE">ICCE (Intracapsular cataract extraction)</option>
+                                <option value="Trabeculectomy">Trabeculectomy</option>
+                                <option value="Tube shunt">Tube shunt surgery</option>
+                                <option value="SLT">SLT (Selective laser trabeculoplasty)</option>
+                                <option value="ALT">ALT (Argon laser trabeculoplasty)</option>
+                                <option value="LPI">LPI (Laser peripheral iridotomy)</option>
+                                <option value="PRP">PRP (Panretinal photocoagulation)</option>
+                                <option value="Focal laser">Focal laser photocoagulation</option>
+                                <option value="Anti-VEGF injection">Anti-VEGF intravitreal injection</option>
+                                <option value="Steroid injection">Steroid intravitreal injection</option>
+                                <option value="Scleral buckle">Scleral buckle</option>
+                                <option value="Pneumatic retinopexy">Pneumatic retinopexy</option>
+                                <option value="Corneal transplant">Corneal transplant (keratoplasty)</option>
+                                <option value="Refractive surgery">Refractive surgery (LASIK, PRK, etc.)</option>
+                                <option value="YAG capsulotomy">YAG laser capsulotomy</option>
+                                <option value="Enucleation">Enucleation</option>
+                                <option value="Evisceration">Evisceration</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Eye</label>
+                            <select name="previous_surgery_eye[]">
+                                <option value="ND" selected>ND</option>
+                                <option value="R">R</option>
+                                <option value="L">L</option>
+                                <option value="R+L">R+L</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" class="add-more-btn" onclick="addPreviousSurgery()">+ Add Another Surgery</button>
+        </div>
+
+        <!-- ========== OTHER/SYSTEMIC CONDITIONS (ICD-10) ========== -->
+        <div class="section-divider">
+            <h3 class="section-title">Other/Systemic Conditions (ICD-10)</h3>
+
+            <div id="systemic_conditions_container">
+                <div class="repeatable-item">
+                    <div class="form-group">
+                        <label>ICD-10 Code</label>
+                        <select name="systemic_condition[]">
+                            <option value="0" selected>0</option>
+                            <option value="ND">ND</option>
+                            <option value="E10">E10 - Type 1 diabetes mellitus</option>
+                            <option value="E11">E11 - Type 2 diabetes mellitus</option>
+                            <option value="I10">I10 - Essential (primary) hypertension</option>
+                            <option value="I11">I11 - Hypertensive heart disease</option>
+                            <option value="I20">I20 - Angina pectoris</option>
+                            <option value="I21">I21 - Acute myocardial infarction</option>
+                            <option value="I25">I25 - Chronic ischaemic heart disease</option>
+                            <option value="I50">I50 - Heart failure</option>
+                            <option value="I63">I63 - Cerebral infarction</option>
+                            <option value="I64">I64 - Stroke, not specified</option>
+                            <option value="J44">J44 - Chronic obstructive pulmonary disease</option>
+                            <option value="J45">J45 - Asthma</option>
+                            <option value="N18">N18 - Chronic kidney disease</option>
+                            <option value="M05">M05 - Rheumatoid arthritis</option>
+                            <option value="M06">M06 - Other rheumatoid arthritis</option>
+                            <option value="M32">M32 - Systemic lupus erythematosus</option>
+                            <option value="C00-C97">C00-C97 - Malignant neoplasms</option>
+                            <option value="D50">D50 - Iron deficiency anaemia</option>
+                            <option value="E03">E03 - Other hypothyroidism</option>
+                            <option value="E05">E05 - Thyrotoxicosis</option>
+                            <option value="E66">E66 - Obesity</option>
+                            <option value="E78">E78 - Disorders of lipoprotein metabolism</option>
+                            <option value="F20">F20 - Schizophrenia</option>
+                            <option value="F31">F31 - Bipolar affective disorder</option>
+                            <option value="F32">F32 - Depressive episode</option>
+                            <option value="F41">F41 - Other anxiety disorders</option>
+                            <option value="G20">G20 - Parkinson's disease</option>
+                            <option value="G30">G30 - Alzheimer's disease</option>
+                            <option value="G35">G35 - Multiple sclerosis</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" class="add-more-btn" onclick="addSystemicCondition()">+ Add Another Condition</button>
+        </div>
+
+        <!-- ========== OCULAR MEDICATIONS ========== -->
+        <div class="section-divider">
+            <h3 class="section-title">Ocular Medications</h3>
+
+            <div id="ocular_medications_container">
+                <div class="repeatable-item">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Medication (Generic Name)</label>
+                            <select name="ocular_medication[]">
+                                <option value="0" selected>0</option>
+                                <option value="ND">ND</option>
+                                <option value="Latanoprost">Latanoprost</option>
+                                <option value="Travoprost">Travoprost</option>
+                                <option value="Bimatoprost">Bimatoprost</option>
+                                <option value="Tafluprost">Tafluprost</option>
+                                <option value="Timolol">Timolol</option>
+                                <option value="Betaxolol">Betaxolol</option>
+                                <option value="Dorzolamide">Dorzolamide</option>
+                                <option value="Brinzolamide">Brinzolamide</option>
+                                <option value="Brimonidine">Brimonidine</option>
+                                <option value="Apraclonidine">Apraclonidine</option>
+                                <option value="Pilocarpine">Pilocarpine</option>
+                                <option value="Prednisolone">Prednisolone (eye drops)</option>
+                                <option value="Dexamethasone">Dexamethasone (eye drops)</option>
+                                <option value="Fluorometholone">Fluorometholone</option>
+                                <option value="Nepafenac">Nepafenac</option>
+                                <option value="Ketorolac">Ketorolac</option>
+                                <option value="Diclofenac">Diclofenac (eye drops)</option>
+                                <option value="Cyclopentolate">Cyclopentolate</option>
+                                <option value="Tropicamide">Tropicamide</option>
+                                <option value="Atropine">Atropine (eye drops)</option>
+                                <option value="Ofloxacin">Ofloxacin</option>
+                                <option value="Moxifloxacin">Moxifloxacin</option>
+                                <option value="Tobramycin">Tobramycin</option>
+                                <option value="Gentamicin">Gentamicin (eye drops)</option>
+                                <option value="Artificial tears">Artificial tears</option>
+                                <option value="Hyaluronic acid">Hyaluronic acid (eye drops)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Eye</label>
+                            <select name="ocular_medication_eye[]">
+                                <option value="ND" selected>ND</option>
+                                <option value="R">R</option>
+                                <option value="L">L</option>
+                                <option value="R+L">R+L</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Days Before Collection (000-999)</label>
+                            <input type="number" name="ocular_medication_days[]" min="0" max="999" placeholder="000">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" class="add-more-btn" onclick="addOcularMedication()">+ Add Another Medication</button>
+        </div>
+
+        <!-- ========== SYSTEMIC MEDICATIONS ========== -->
+        <div class="section-divider">
+            <h3 class="section-title">Other/Systemic Medications</h3>
+
+            <div id="systemic_medications_container">
+                <div class="repeatable-item">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Medication (Generic Name)</label>
+                            <select name="systemic_medication[]">
+                                <option value="0" selected>0</option>
+                                <option value="ND">ND</option>
+                                <option value="Metformin">Metformin</option>
+                                <option value="Insulin">Insulin</option>
+                                <option value="Glimepiride">Glimepiride</option>
+                                <option value="Sitagliptin">Sitagliptin</option>
+                                <option value="Amlodipine">Amlodipine</option>
+                                <option value="Enalapril">Enalapril</option>
+                                <option value="Losartan">Losartan</option>
+                                <option value="Hydrochlorothiazide">Hydrochlorothiazide</option>
+                                <option value="Atorvastatin">Atorvastatin</option>
+                                <option value="Simvastatin">Simvastatin</option>
+                                <option value="Aspirin">Aspirin</option>
+                                <option value="Clopidogrel">Clopidogrel</option>
+                                <option value="Warfarin">Warfarin</option>
+                                <option value="Rivaroxaban">Rivaroxaban</option>
+                                <option value="Levothyroxine">Levothyroxine</option>
+                                <option value="Prednisolone">Prednisolone (oral)</option>
+                                <option value="Methotrexate">Methotrexate</option>
+                                <option value="Hydroxychloroquine">Hydroxychloroquine</option>
+                                <option value="Omeprazole">Omeprazole</option>
+                                <option value="Pantoprazole">Pantoprazole</option>
+                                <option value="Sertraline">Sertraline</option>
+                                <option value="Escitalopram">Escitalopram</option>
+                                <option value="Alprazolam">Alprazolam</option>
+                                <option value="Zolpidem">Zolpidem</option>
+                                <option value="Paracetamol">Paracetamol</option>
+                                <option value="Ibuprofen">Ibuprofen</option>
+                                <option value="Diclofenac">Diclofenac (oral)</option>
+                            </select>
+                        </div>
+
+                        <div class="form-group">
+                            <label>Days Before Collection (000-999)</label>
+                            <input type="number" name="systemic_medication_days[]" min="0" max="999" placeholder="000">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <button type="button" class="add-more-btn" onclick="addSystemicMedication()">+ Add Another Medication</button>
+        </div>
+
+        <!-- Submit Buttons -->
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 30px;">
             <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Cancel</a>
             <button type="submit" class="btn btn-success">Save Patient</button>
         </div>
@@ -149,8 +1011,8 @@
 </div>
 
 <script>
+// Patient ID checking
 let checkTimeout;
-
 function checkPatientId(id) {
     clearTimeout(checkTimeout);
     const statusEl = document.getElementById('id-status');
@@ -166,16 +1028,202 @@ function checkPatientId(id) {
                     statusEl.textContent = '✓ ID available';
                     statusEl.style.color = '#27ae60';
                 } else {
-                    statusEl.textContent = '✗ ID already exists';
+                    statusEl.textContent = '✗ ID already exists - please choose another';
                     statusEl.style.color = '#e74c3c';
                 }
             });
     }, 500);
 }
 
+// Conditional field handlers
 function handleLensStatus(value) {
-    const locsFields = document.getElementById('locs_fields');
-    locsFields.style.display = value === 'Phakic' ? 'block' : 'none';
+    document.getElementById('locs_fields').classList.toggle('active', value === 'Phakic');
+    document.getElementById('iol_fields').classList.toggle('active', value === 'Pseudophakic');
+    document.getElementById('aphakia_fields').classList.toggle('active', value === 'Aphakic');
 }
+
+function handleGlaucoma(value) {
+    document.getElementById('oht_pac_fields').classList.toggle('active', value === '0');
+    document.getElementById('glaucoma_etiology_fields').classList.toggle('active', value === '1');
+}
+
+function handleDR(value) {
+    document.getElementById('dr_stage_fields').classList.toggle('active', value === '1');
+}
+
+function handleDRStage(value) {
+    document.getElementById('npdr_stage_fields').classList.toggle('active', value === 'NPDR');
+    document.getElementById('pdr_stage_fields').classList.toggle('active', value === 'PDR');
+}
+
+function handleME(value) {
+    document.getElementById('me_etiology_fields').classList.toggle('active', value === '1');
+}
+
+function handleMD(value) {
+    document.getElementById('md_etiology_fields').classList.toggle('active', value === '1');
+}
+
+function handleMDEtiology(value) {
+    document.getElementById('amd_stage_fields').classList.toggle('active', value === 'AMD');
+    document.getElementById('other_md_stage_fields').classList.toggle('active', value === 'Other' || value === 'ND');
+}
+
+function handleAMDStage(value) {
+    const showExudation = ['nAMD', 'nAMD+GA', 'ND'].includes(value);
+    document.getElementById('amd_exudation_fields').classList.toggle('active', showExudation);
+}
+
+function handleOtherMDStage(value) {
+    document.getElementById('other_md_exudation_fields').classList.toggle('active', value !== 'ND');
+}
+
+function handleMHVMT(value) {
+    document.getElementById('mh_vmt_fields').classList.toggle('active', value === '1');
+}
+
+function handleMHVMTEtiology(value) {
+    document.getElementById('secondary_mh_vmt_fields').classList.toggle('active', value === 'Secondary');
+}
+
+function handleERM(value) {
+    document.getElementById('erm_fields').classList.toggle('active', value === '1');
+}
+
+function handleERMEtiology(value) {
+    document.getElementById('secondary_erm_fields').classList.toggle('active', value === 'Secondary');
+}
+
+function handleRD(value) {
+    const showFields = value !== '0' && value !== 'ND';
+    document.getElementById('rd_fields').classList.toggle('active', showFields);
+}
+
+function handleVO(value) {
+    document.getElementById('vh_etiology_fields').classList.toggle('active', value === 'Vitreous haemorrhage');
+}
+
+// Add more repeatable items
+function addOtherOcularCondition() {
+    const container = document.getElementById('other_ocular_conditions_container');
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+
+    container.appendChild(item);
+}
+
+// Form validation before submit
+document.getElementById('patientForm').addEventListener('submit', function(e) {
+    e.preventDefault();
+
+    // Validate patient ID is available
+    const idStatus = document.getElementById('id-status');
+    if (idStatus.textContent.includes('already exists')) {
+        alert('Patient ID is already in use. Please choose a different ID.');
+        return false;
+    }
+
+    // Validate MBO format
+    const mbo = document.getElementById('mbo').value;
+    if (!/^\d{9}$/.test(mbo)) {
+        alert('MBO must be exactly 9 digits.');
+        return false;
+    }
+
+    // Validate dates
+    const dobDay = document.querySelector('[name="dob_day"]').value;
+    const dobMonth = document.querySelector('[name="dob_month"]').value;
+    const dobYear = document.querySelector('[name="dob_year"]').value;
+
+    const colDay = document.querySelector('[name="collection_day"]').value;
+    const colMonth = document.querySelector('[name="collection_month"]').value;
+    const colYear = document.querySelector('[name="collection_year"]').value;
+
+    if (!dobDay || !dobMonth || !dobYear || !colDay || !colMonth || !colYear) {
+        alert('Please fill in all date fields.');
+        return false;
+    }
+
+    const dob = new Date(dobYear, dobMonth - 1, dobDay);
+    const collection = new Date(colYear, colMonth - 1, colDay);
+
+    if (collection <= dob) {
+        alert('Date of sample collection must be after date of birth.');
+        return false;
+    }
+
+    // If all validations pass, submit the form
+    if (confirm('Are you sure you want to save this patient record?')) {
+        this.submit();
+    }
+});
 </script>
-{% endblock %}
+{% endblock %}Btn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+
+    container.appendChild(item);
+}
+
+function addPreviousSurgery() {
+    const container = document.getElementById('previous_surgeries_container');
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+
+    container.appendChild(item);
+}
+
+function addSystemicCondition() {
+    const container = document.getElementById('systemic_conditions_container');
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+
+    container.appendChild(item);
+}
+
+function addOcularMedication() {
+    const container = document.getElementById('ocular_medications_container');
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+    item.querySelectorAll('input').forEach(input => input.value = '');
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+
+    container.appendChild(item);
+}
+
+function addSystemicMedication() {
+    const container = document.getElementById('systemic_medications_container');
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+    item.querySelectorAll('input').forEach(input => input.value = '');
+
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    remove
