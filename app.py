@@ -375,9 +375,180 @@ def new_patient():
         return render_template('new_patient.html', next_patient_id=1500)
 
     # Handle POST - save patient
-    # This will be implemented in the next iteration
-    flash('Patient creation functionality coming soon', 'info')
-    return redirect(url_for('dashboard'))
+    try:
+        conn = get_db_connection()
+        if not conn:
+            flash('Database connection error', 'error')
+            return redirect(url_for('new_patient'))
+
+        cur = conn.cursor()
+
+        # Extract form data
+        patient_id = int(request.form.get('patient_id'))
+        patient_name = request.form.get('patient_name')
+        mbo = request.form.get('mbo')
+        sex = request.form.get('sex')
+        eye = request.form.get('eye')
+
+        # Build dates
+        dob_day = int(request.form.get('dob_day'))
+        dob_month = int(request.form.get('dob_month'))
+        dob_year = int(request.form.get('dob_year'))
+        date_of_birth = date(dob_year, dob_month, dob_day)
+
+        col_day = int(request.form.get('collection_day'))
+        col_month = int(request.form.get('collection_month'))
+        col_year = int(request.form.get('collection_year'))
+        date_of_collection = date(col_year, col_month, col_day)
+
+        # Check if patient ID already exists
+        cur.execute("SELECT 1 FROM patients_sensitive WHERE patient_id = %s", (patient_id,))
+        if cur.fetchone():
+            flash('Patient ID already exists. Please choose a different ID.', 'error')
+            return redirect(url_for('new_patient'))
+
+        # Insert into patients_sensitive
+        cur.execute("""
+            INSERT INTO patients_sensitive 
+            (patient_id, patient_name, mbo, date_of_birth, date_of_sample_collection, created_by)
+            VALUES (%s, %s, %s, %s, %s, %s)
+        """, (patient_id, patient_name, mbo, date_of_birth, date_of_collection, session['user_id']))
+
+        # Insert into patients_statistical
+        person_hash = generate_person_hash(mbo)
+        age = calculate_age(date_of_birth, date_of_collection)
+
+        cur.execute("""
+            INSERT INTO patients_statistical 
+            (patient_id, person_hash, age, sex, eye)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (patient_id, person_hash, age, sex, eye))
+
+        # Insert ocular conditions
+        cur.execute("""
+            INSERT INTO ocular_conditions (
+                patient_id, lens_status, locs_iii_no, locs_iii_nc, locs_iii_c, locs_iii_p,
+                iol_type, aphakia_etiology, glaucoma, oht_or_pac, glaucoma_etiology,
+                steroid_responder, pxs, pds, diabetic_retinopathy, dr_stage, npdr_stage, pdr_stage,
+                macular_edema, me_etiology, macular_degeneration, md_etiology, amd_stage, amd_exudation,
+                other_md_stage, other_md_exudation, mh_vmt, mh_vmt_etiology, secondary_mh_vmt_cause,
+                mh_vmt_treatment_status, epiretinal_membrane, erm_etiology, secondary_erm_cause,
+                erm_treatment_status, retinal_detachment, rd_etiology, rd_treatment_status, pvr,
+                vitreous_opacification, vh_etiology
+            ) VALUES (
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s,
+                %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s
+            )
+        """, (
+            patient_id,
+            request.form.get('lens_status', 'ND'),
+            request.form.get('locs_no', 'ND'),
+            request.form.get('locs_nc', 'ND'),
+            request.form.get('locs_c', 'ND'),
+            request.form.get('locs_p', 'ND'),
+            request.form.get('iol_type', 'ND'),
+            request.form.get('aphakia_etiology', 'ND'),
+            request.form.get('glaucoma', '0'),
+            request.form.get('oht_or_pac', '0'),
+            request.form.get('glaucoma_etiology', 'ND'),
+            request.form.get('steroid_responder', '0'),
+            request.form.get('pxs', '0'),
+            request.form.get('pds', '0'),
+            request.form.get('diabetic_retinopathy', '0'),
+            request.form.get('dr_stage', 'ND'),
+            request.form.get('npdr_stage', 'ND'),
+            request.form.get('pdr_stage', 'ND'),
+            request.form.get('macular_edema', '0'),
+            request.form.get('me_etiology', 'ND'),
+            request.form.get('macular_degeneration', '0'),
+            request.form.get('md_etiology', 'ND'),
+            request.form.get('amd_stage', 'ND'),
+            request.form.get('amd_exudation', '0'),
+            request.form.get('other_md_stage', 'ND'),
+            request.form.get('other_md_exudation', '0'),
+            request.form.get('mh_vmt', '0'),
+            request.form.get('mh_vmt_etiology', 'ND'),
+            request.form.get('secondary_mh_vmt_cause', 'ND'),
+            request.form.get('mh_vmt_treatment_status', 'ND'),
+            request.form.get('epiretinal_membrane', '0'),
+            request.form.get('erm_etiology', 'ND'),
+            request.form.get('secondary_erm_cause', 'ND'),
+            request.form.get('erm_treatment_status', 'ND'),
+            request.form.get('retinal_detachment', '0'),
+            request.form.get('rd_etiology', 'ND'),
+            request.form.get('rd_treatment_status', 'ND'),
+            request.form.get('pvr', '0'),
+            request.form.get('vitreous_opacification', '0'),
+            request.form.get('vh_etiology', 'ND')
+        ))
+
+        # Insert other ocular conditions (multiple)
+        other_conditions = request.form.getlist('other_ocular_condition[]')
+        other_condition_eyes = request.form.getlist('other_ocular_condition_eye[]')
+        for i, condition in enumerate(other_conditions):
+            if condition and condition not in ['0', '']:
+                cur.execute("""
+                    INSERT INTO other_ocular_conditions (patient_id, icd10_code, eye)
+                    VALUES (%s, %s, %s)
+                """, (patient_id, condition, other_condition_eyes[i] if i < len(other_condition_eyes) else 'ND'))
+
+        # Insert previous surgeries (multiple)
+        surgeries = request.form.getlist('previous_surgery[]')
+        surgery_eyes = request.form.getlist('previous_surgery_eye[]')
+        for i, surgery in enumerate(surgeries):
+            if surgery and surgery not in ['0', '']:
+                cur.execute("""
+                    INSERT INTO previous_ocular_surgeries (patient_id, surgery_code, eye)
+                    VALUES (%s, %s, %s)
+                """, (patient_id, surgery, surgery_eyes[i] if i < len(surgery_eyes) else 'ND'))
+
+        # Insert systemic conditions (multiple)
+        systemic_conditions = request.form.getlist('systemic_condition[]')
+        for condition in systemic_conditions:
+            if condition and condition not in ['0', '']:
+                cur.execute("""
+                    INSERT INTO systemic_conditions (patient_id, icd10_code)
+                    VALUES (%s, %s)
+                """, (patient_id, condition))
+
+        # Insert ocular medications (multiple)
+        ocular_meds = request.form.getlist('ocular_medication[]')
+        ocular_med_eyes = request.form.getlist('ocular_medication_eye[]')
+        ocular_med_days = request.form.getlist('ocular_medication_days[]')
+        for i, med in enumerate(ocular_meds):
+            if med and med not in ['0', '']:
+                days = ocular_med_days[i] if i < len(ocular_med_days) and ocular_med_days[i] else None
+                cur.execute("""
+                    INSERT INTO ocular_medications 
+                    (patient_id, trade_name, generic_name, eye, days_before_collection)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (patient_id, med, med, ocular_med_eyes[i] if i < len(ocular_med_eyes) else 'ND', days))
+
+        # Insert systemic medications (multiple)
+        systemic_meds = request.form.getlist('systemic_medication[]')
+        systemic_med_days = request.form.getlist('systemic_medication_days[]')
+        for i, med in enumerate(systemic_meds):
+            if med and med not in ['0', '']:
+                days = systemic_med_days[i] if i < len(systemic_med_days) and systemic_med_days[i] else None
+                cur.execute("""
+                    INSERT INTO systemic_medications 
+                    (patient_id, trade_name, generic_name, days_before_collection)
+                    VALUES (%s, %s, %s, %s)
+                """, (patient_id, med, med, days))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        flash(f'Patient #{patient_id} ({patient_name}) successfully created!', 'success')
+        return redirect(url_for('dashboard'))
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error saving patient: {e}")
+        flash(f'Error saving patient: {str(e)}', 'error')
+        return redirect(url_for('new_patient'))
 
 
 @app.route('/api/check-patient-id/<int:patient_id>')
