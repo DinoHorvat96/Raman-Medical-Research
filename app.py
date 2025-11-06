@@ -1,12 +1,14 @@
 import os
 import hashlib
 from datetime import datetime, date
-from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
+from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify, send_file
 from flask_bcrypt import Bcrypt
 import psycopg2
 from psycopg2.extras import RealDictCursor
 from psycopg2.extensions import ISOLATION_LEVEL_AUTOCOMMIT
 from dotenv import load_dotenv
+import csv
+import io
 
 # Load environment variables
 load_dotenv()
@@ -345,6 +347,359 @@ def dashboard():
         return redirect(url_for('login'))
 
     return render_template('dashboard.html')
+
+
+@app.route('/export-data', methods=['GET', 'POST'])
+def export_data():
+    """Export anonymized patient data for statistical analysis"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if session.get('role') not in ['Administrator', 'Staff']:
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+
+    if request.method == 'POST':
+        # Get export parameters
+        export_format = request.form.get('format', 'csv')
+        include_conditions = request.form.get('include_conditions', 'off') == 'on'
+        include_other_conditions = request.form.get('include_other_conditions', 'off') == 'on'
+        include_medications = request.form.get('include_medications', 'off') == 'on'
+        include_surgeries = request.form.get('include_surgeries', 'off') == 'on'
+        include_systemic = request.form.get('include_systemic', 'off') == 'on'
+        date_from = request.form.get('date_from')
+        date_to = request.form.get('date_to')
+
+        # Generate the export
+        export_file = generate_statistical_export(
+            export_format,
+            include_conditions,
+            include_other_conditions,
+            include_medications,
+            include_surgeries,
+            include_systemic,
+            date_from,
+            date_to
+        )
+
+        if export_file:
+            return export_file
+        else:
+            flash('Error generating export', 'error')
+
+    # Get summary statistics for display
+    conn = get_db_connection()
+    stats = {}
+    if conn:
+        try:
+            cur = conn.cursor()
+
+            # Total patients
+            cur.execute("SELECT COUNT(*) FROM patients_sensitive")
+            stats['total_patients'] = cur.fetchone()[0]
+
+            # Gender distribution
+            cur.execute("""
+                SELECT sex, COUNT(*) 
+                FROM patients_statistical 
+                WHERE sex IN ('M', 'F')
+                GROUP BY sex
+            """)
+            gender_stats = cur.fetchall()
+            stats['gender'] = {row[0]: row[1] for row in gender_stats}
+
+            # Age distribution
+            cur.execute("""
+                SELECT 
+                    CASE 
+                        WHEN age < 18 THEN '<18'
+                        WHEN age BETWEEN 18 AND 40 THEN '18-40'
+                        WHEN age BETWEEN 41 AND 60 THEN '41-60'
+                        WHEN age BETWEEN 61 AND 80 THEN '61-80'
+                        ELSE '>80'
+                    END as age_group,
+                    COUNT(*) as count
+                FROM patients_statistical
+                WHERE age IS NOT NULL
+                GROUP BY age_group
+                ORDER BY age_group
+            """)
+            stats['age_distribution'] = cur.fetchall()
+
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"Error getting statistics: {e}")
+            if conn:
+                conn.close()
+
+    return render_template('export_data.html', stats=stats)
+
+
+def generate_statistical_export(format_type='csv', include_conditions=True,
+                                include_other_conditions=False,
+                                include_medications=False, include_surgeries=False,
+                                include_systemic=False, date_from=None, date_to=None):
+    """Generate anonymized statistical export"""
+
+    conn = get_db_connection()
+    if not conn:
+        return None
+
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Build the main query
+        query = """
+            SELECT 
+                pst.person_hash,
+                pst.age,
+                pst.sex,
+                pst.eye
+        """
+
+        tables = [
+            "FROM patients_sensitive ps",
+            "JOIN patients_statistical pst ON ps.patient_id = pst.patient_id"
+        ]
+
+        where_clauses = []
+        params = []
+
+        if include_conditions:
+            query += """,
+                oc.lens_status,
+                oc.locs_iii_no, oc.locs_iii_nc, oc.locs_iii_c, oc.locs_iii_p,
+                oc.iol_type, oc.aphakia_etiology,
+                oc.glaucoma, oc.oht_or_pac, oc.glaucoma_etiology,
+                oc.steroid_responder, oc.pxs, oc.pds,
+                oc.diabetic_retinopathy, oc.dr_stage, oc.npdr_stage, oc.pdr_stage,
+                oc.macular_edema, oc.me_etiology,
+                oc.macular_degeneration, oc.md_etiology, oc.amd_stage, oc.amd_exudation,
+                oc.other_md_stage, oc.other_md_exudation,
+                oc.mh_vmt, oc.mh_vmt_etiology, oc.secondary_mh_vmt_cause, oc.mh_vmt_treatment_status,
+                oc.epiretinal_membrane, oc.erm_etiology, oc.secondary_erm_cause, oc.erm_treatment_status,
+                oc.retinal_detachment, oc.rd_etiology, oc.rd_treatment_status, oc.pvr,
+                oc.vitreous_opacification, oc.vh_etiology
+            """
+            tables.append("LEFT JOIN ocular_conditions oc ON ps.patient_id = oc.patient_id")
+
+        # Add date filters if provided
+        if date_from:
+            where_clauses.append("ps.date_of_sample_collection >= %s")
+            params.append(date_from)
+
+        if date_to:
+            where_clauses.append("ps.date_of_sample_collection <= %s")
+            params.append(date_to)
+
+        # Build final query
+        query += " " + " ".join(tables)
+        if where_clauses:
+            query += " WHERE " + " AND ".join(where_clauses)
+        query += " ORDER BY ps.patient_id"
+
+        cur.execute(query, params)
+        main_data = cur.fetchall()
+
+        # Process additional data if needed
+        additional_data = {}
+
+        if include_other_conditions:
+            cur.execute("""
+                SELECT patient_id, icd10_code, eye 
+                FROM other_ocular_conditions 
+                ORDER BY patient_id, id
+            """)
+            other_conditions = cur.fetchall()
+            for row in other_conditions:
+                pid = row['patient_id']
+                if pid not in additional_data:
+                    additional_data[pid] = {}
+                if 'other_ocular_conditions' not in additional_data[pid]:
+                    additional_data[pid]['other_ocular_conditions'] = []
+                additional_data[pid]['other_ocular_conditions'].append(f"{row['icd10_code']}_{row['eye']}")
+
+        if include_surgeries:
+            cur.execute("""
+                SELECT patient_id, surgery_code, eye 
+                FROM previous_ocular_surgeries 
+                ORDER BY patient_id, id
+            """)
+            surgeries = cur.fetchall()
+            for row in surgeries:
+                pid = row['patient_id']
+                if pid not in additional_data:
+                    additional_data[pid] = {}
+                if 'previous_surgeries' not in additional_data[pid]:
+                    additional_data[pid]['previous_surgeries'] = []
+                additional_data[pid]['previous_surgeries'].append(f"{row['surgery_code']}_{row['eye']}")
+
+        if include_systemic:
+            cur.execute("""
+                SELECT patient_id, icd10_code 
+                FROM systemic_conditions 
+                ORDER BY patient_id, id
+            """)
+            systemic = cur.fetchall()
+            for row in systemic:
+                pid = row['patient_id']
+                if pid not in additional_data:
+                    additional_data[pid] = {}
+                if 'systemic_conditions' not in additional_data[pid]:
+                    additional_data[pid]['systemic_conditions'] = []
+                additional_data[pid]['systemic_conditions'].append(row['icd10_code'])
+
+        if include_medications:
+            # Ocular medications
+            cur.execute("""
+                SELECT patient_id, generic_name, eye, days_before_collection 
+                FROM ocular_medications 
+                ORDER BY patient_id, id
+            """)
+            ocular_meds = cur.fetchall()
+            for row in ocular_meds:
+                pid = row['patient_id']
+                if pid not in additional_data:
+                    additional_data[pid] = {}
+                if 'ocular_medications' not in additional_data[pid]:
+                    additional_data[pid]['ocular_medications'] = []
+                additional_data[pid]['ocular_medications'].append(
+                    f"{row['generic_name']}_{row['eye']}_{row['days_before_collection']}"
+                )
+
+            # Systemic medications
+            cur.execute("""
+                SELECT patient_id, generic_name, days_before_collection 
+                FROM systemic_medications 
+                ORDER BY patient_id, id
+            """)
+            systemic_meds = cur.fetchall()
+            for row in systemic_meds:
+                pid = row['patient_id']
+                if pid not in additional_data:
+                    additional_data[pid] = {}
+                if 'systemic_medications' not in additional_data[pid]:
+                    additional_data[pid]['systemic_medications'] = []
+                additional_data[pid]['systemic_medications'].append(
+                    f"{row['generic_name']}_{row['days_before_collection']}"
+                )
+
+        cur.close()
+        conn.close()
+
+        if format_type == 'csv':
+            # Create CSV in memory
+            output = io.StringIO()
+
+            if main_data:
+                # Get all field names
+                fieldnames = list(main_data[0].keys())
+
+                # Add additional fields
+                if additional_data:
+                    all_additional_fields = set()
+                    for patient_data in additional_data.values():
+                        all_additional_fields.update(patient_data.keys())
+                    fieldnames.extend(sorted(all_additional_fields))
+
+                writer = csv.DictWriter(output, fieldnames=fieldnames)
+                writer.writeheader()
+
+                for row in main_data:
+                    # Add additional data if exists
+                    pid = row.get('patient_id')
+                    if pid in additional_data:
+                        for key, values in additional_data[pid].items():
+                            row[key] = '; '.join(values)
+                    writer.writerow(row)
+
+            # Convert to bytes
+            output.seek(0)
+            mem = io.BytesIO()
+            mem.write(output.getvalue().encode('utf-8-sig'))  # UTF-8 with BOM for Excel
+            mem.seek(0)
+
+            return send_file(
+                mem,
+                mimetype='text/csv',
+                download_name=f'raman_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv',
+                as_attachment=True
+            )
+
+        elif format_type == 'excel':
+            # For Excel export, we'll need openpyxl
+            try:
+                from openpyxl import Workbook
+                from openpyxl.utils import get_column_letter
+
+                wb = Workbook()
+                ws = wb.active
+                ws.title = "Patient Data"
+
+                if main_data:
+                    # Prepare headers
+                    headers = list(main_data[0].keys())
+
+                    # Add additional field headers
+                    if additional_data:
+                        all_additional_fields = set()
+                        for patient_data in additional_data.values():
+                            all_additional_fields.update(patient_data.keys())
+                        headers.extend(sorted(all_additional_fields))
+
+                    # Write headers
+                    for col, header in enumerate(headers, 1):
+                        ws.cell(row=1, column=col, value=header)
+
+                    # Write data
+                    for row_idx, row in enumerate(main_data, 2):
+                        # Add main data
+                        for col_idx, header in enumerate(headers, 1):
+                            if header in row:
+                                ws.cell(row=row_idx, column=col_idx, value=row[header])
+                            else:
+                                # Check additional data
+                                pid = row.get('patient_id')
+                                if pid in additional_data and header in additional_data[pid]:
+                                    value = '; '.join(additional_data[pid][header])
+                                    ws.cell(row=row_idx, column=col_idx, value=value)
+
+                    # Auto-adjust column widths
+                    for column in ws.columns:
+                        max_length = 0
+                        column = [cell for cell in column]
+                        for cell in column:
+                            try:
+                                if len(str(cell.value)) > max_length:
+                                    max_length = len(str(cell.value))
+                            except:
+                                pass
+                        adjusted_width = min(max_length + 2, 50)
+                        ws.column_dimensions[get_column_letter(column[0].column)].width = adjusted_width
+
+                # Save to memory
+                excel_mem = io.BytesIO()
+                wb.save(excel_mem)
+                excel_mem.seek(0)
+
+                return send_file(
+                    excel_mem,
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    download_name=f'raman_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx',
+                    as_attachment=True
+                )
+
+            except ImportError:
+                flash('openpyxl library not installed. Please install it for Excel export: pip install openpyxl',
+                      'error')
+                return None
+
+    except Exception as e:
+        print(f"Error generating export: {e}")
+        if conn:
+            conn.close()
+        return None
 
 
 @app.route('/new-patient', methods=['GET', 'POST'])
