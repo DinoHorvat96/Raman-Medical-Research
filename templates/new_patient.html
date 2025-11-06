@@ -1164,66 +1164,54 @@ document.getElementById('patientForm').addEventListener('submit', function(e) {
         this.submit();
     }
 });
+
+// Initialize conditional fields on page load to ensure they show correctly
+document.addEventListener('DOMContentLoaded', function() {
+    // Trigger all handlers to ensure proper initial state
+    const lensStatus = document.getElementById('lens_status');
+    if (lensStatus) handleLensStatus(lensStatus.value);
+
+    const glaucoma = document.getElementById('glaucoma');
+    if (glaucoma) handleGlaucoma(glaucoma.value);
+
+    const dr = document.getElementById('diabetic_retinopathy');
+    if (dr) handleDR(dr.value);
+
+    const drStage = document.getElementById('dr_stage');
+    if (drStage) handleDRStage(drStage.value);
+
+    const me = document.getElementById('macular_edema');
+    if (me) handleME(me.value);
+
+    const md = document.getElementById('macular_degeneration');
+    if (md) handleMD(md.value);
+
+    const mdEtiology = document.getElementById('md_etiology');
+    if (mdEtiology) handleMDEtiology(mdEtiology.value);
+
+    const amdStage = document.getElementById('amd_stage');
+    if (amdStage) handleAMDStage(amdStage.value);
+
+    const otherMdStage = document.getElementById('other_md_stage');
+    if (otherMdStage) handleOtherMDStage(otherMdStage.value);
+
+    const mhVmt = document.getElementById('mh_vmt');
+    if (mhVmt) handleMHVMT(mhVmt.value);
+
+    const mhVmtEtiology = document.getElementById('mh_vmt_etiology');
+    if (mhVmtEtiology) handleMHVMTEtiology(mhVmtEtiology.value);
+
+    const erm = document.getElementById('epiretinal_membrane');
+    if (erm) handleERM(erm.value);
+
+    const ermEtiology = document.getElementById('erm_etiology');
+    if (ermEtiology) handleERMEtiology(ermEtiology.value);
+
+    const rd = document.getElementById('retinal_detachment');
+    if (rd) handleRD(rd.value);
+
+    const vo = document.getElementById('vitreous_opacification');
+    if (vo) handleVO(vo.value);
+});
 </script>
-{% endblock %}Btn.onclick = function() { this.parentElement.remove(); };
-    item.appendChild(removeBtn);
-
-    container.appendChild(item);
-}
-
-function addPreviousSurgery() {
-    const container = document.getElementById('previous_surgeries_container');
-    const item = container.firstElementChild.cloneNode(true);
-    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
-
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'remove-btn';
-    removeBtn.textContent = '✕ Remove';
-    removeBtn.onclick = function() { this.parentElement.remove(); };
-    item.appendChild(removeBtn);
-
-    container.appendChild(item);
-}
-
-function addSystemicCondition() {
-    const container = document.getElementById('systemic_conditions_container');
-    const item = container.firstElementChild.cloneNode(true);
-    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
-
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'remove-btn';
-    removeBtn.textContent = '✕ Remove';
-    removeBtn.onclick = function() { this.parentElement.remove(); };
-    item.appendChild(removeBtn);
-
-    container.appendChild(item);
-}
-
-function addOcularMedication() {
-    const container = document.getElementById('ocular_medications_container');
-    const item = container.firstElementChild.cloneNode(true);
-    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
-    item.querySelectorAll('input').forEach(input => input.value = '');
-
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'remove-btn';
-    removeBtn.textContent = '✕ Remove';
-    removeBtn.onclick = function() { this.parentElement.remove(); };
-    item.appendChild(removeBtn);
-
-    container.appendChild(item);
-}
-
-function addSystemicMedication() {
-    const container = document.getElementById('systemic_medications_container');
-    const item = container.firstElementChild.cloneNode(true);
-    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
-    item.querySelectorAll('input').forEach(input => input.value = '');
-
-    const removeBtn = document.createElement('button');
-    removeBtn.type = 'button';
-    removeBtn.className = 'remove-btn';
-    remove
+{% endblock %}

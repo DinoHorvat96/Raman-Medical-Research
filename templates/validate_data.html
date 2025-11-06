@@ -1,0 +1,276 @@
+<!-- templates/validate_data.html -->
+{% extends "base.html" %}
+
+{% block title %}Validate Data - Raman{% endblock %}
+
+{% block content %}
+<style>
+    .search-box {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        margin-bottom: 30px;
+    }
+
+    .search-form {
+        display: grid;
+        grid-template-columns: 150px 1fr auto;
+        gap: 15px;
+        align-items: end;
+    }
+
+    .results-table {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+
+    .results-header {
+        padding: 20px 30px;
+        border-bottom: 2px solid #ecf0f1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    table th {
+        background: #f8f9fa;
+        padding: 15px 20px;
+        text-align: left;
+        font-weight: 600;
+        color: #2c3e50;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+
+    table td {
+        padding: 15px 20px;
+        border-bottom: 1px solid #ecf0f1;
+        font-size: 14px;
+    }
+
+    table tr:hover {
+        background: #f8f9fa;
+    }
+
+    .patient-id {
+        font-weight: 600;
+        color: #3498db;
+    }
+
+    .patient-name {
+        font-weight: 500;
+        color: #2c3e50;
+    }
+
+    .edit-btn {
+        padding: 8px 16px;
+        background: #3498db;
+        color: white;
+        text-decoration: none;
+        border-radius: 4px;
+        font-size: 13px;
+        transition: all 0.3s;
+        display: inline-block;
+    }
+
+    .edit-btn:hover {
+        background: #2980b9;
+        transform: translateY(-1px);
+    }
+
+    .no-results {
+        text-align: center;
+        padding: 60px 20px;
+        color: #7f8c8d;
+    }
+
+    .no-results-icon {
+        font-size: 64px;
+        margin-bottom: 20px;
+        opacity: 0.3;
+    }
+
+    .search-type-selector {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+    }
+
+    .search-type-btn {
+        padding: 8px 16px;
+        border: 2px solid #ecf0f1;
+        background: white;
+        border-radius: 4px;
+        cursor: pointer;
+        font-size: 13px;
+        color: #7f8c8d;
+        transition: all 0.3s;
+    }
+
+    .search-type-btn.active {
+        border-color: #3498db;
+        background: #3498db;
+        color: white;
+    }
+
+    .search-type-btn:hover {
+        border-color: #3498db;
+    }
+
+    .badge {
+        display: inline-block;
+        padding: 4px 8px;
+        border-radius: 3px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+    }
+
+    .badge-sex-m {
+        background: #d4e6f1;
+        color: #2874a6;
+    }
+
+    .badge-sex-f {
+        background: #f9ebea;
+        color: #a93226;
+    }
+
+    .badge-eye {
+        background: #d5f4e6;
+        color: #1e8449;
+    }
+</style>
+
+<div class="search-box">
+    <h2 style="margin-bottom: 20px;">Search Patients</h2>
+
+    <div class="search-type-selector">
+        <button type="button" class="search-type-btn {% if search_type == 'id' or not search_type %}active{% endif %}"
+                onclick="setSearchType('id')">Patient ID</button>
+        <button type="button" class="search-type-btn {% if search_type == 'name' %}active{% endif %}"
+                onclick="setSearchType('name')">Name</button>
+        <button type="button" class="search-type-btn {% if search_type == 'mbo' %}active{% endif %}"
+                onclick="setSearchType('mbo')">MBO</button>
+    </div>
+
+    <form method="GET" action="{{ url_for('validate_data') }}" class="search-form">
+        <div class="form-group" style="margin: 0;">
+            <select name="type" id="search_type" class="form-control" style="height: 44px;">
+                <option value="id" {% if search_type == 'id' or not search_type %}selected{% endif %}>Patient ID</option>
+                <option value="name" {% if search_type == 'name' %}selected{% endif %}>Name</option>
+                <option value="mbo" {% if search_type == 'mbo' %}selected{% endif %}>MBO</option>
+            </select>
+        </div>
+
+        <div class="form-group" style="margin: 0;">
+            <input type="text" name="q" value="{{ search_query }}"
+                   placeholder="Enter search term..."
+                   class="form-control"
+                   style="height: 44px; font-size: 14px;"
+                   autofocus>
+        </div>
+
+        <button type="submit" class="btn btn-primary" style="height: 44px; padding: 0 30px;">
+            🔍 Search
+        </button>
+    </form>
+
+    <p style="color: #7f8c8d; font-size: 13px; margin-top: 15px; margin-bottom: 0;">
+        {% if search_query %}
+            Showing results for "{{ search_query }}"
+        {% else %}
+            Showing 20 most recent patients
+        {% endif %}
+    </p>
+</div>
+
+<div class="results-table">
+    <div class="results-header">
+        <h3 style="margin: 0; color: #2c3e50;">
+            {% if patients %}
+                {{ patients|length }} Patient{% if patients|length != 1 %}s{% endif %} Found
+            {% else %}
+                No Patients Found
+            {% endif %}
+        </h3>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+
+    {% if patients %}
+    <table>
+        <thead>
+            <tr>
+                <th>Patient ID</th>
+                <th>Name</th>
+                <th>Date of Birth</th>
+                <th>Sample Collection</th>
+                <th>Sex</th>
+                <th>Eye</th>
+                <th>Action</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for patient in patients %}
+            <tr>
+                <td class="patient-id">#{{ '%05d'|format(patient.patient_id) }}</td>
+                <td class="patient-name">{{ patient.patient_name }}</td>
+                <td>{{ patient.date_of_birth.strftime('%d.%m.%Y') if patient.date_of_birth else 'N/A' }}</td>
+                <td>{{ patient.date_of_sample_collection.strftime('%d.%m.%Y') if patient.date_of_sample_collection else 'N/A' }}</td>
+                <td>
+                    <span class="badge badge-sex-{{ patient.sex|lower }}">{{ patient.sex }}</span>
+                </td>
+                <td>
+                    <span class="badge badge-eye">{{ patient.eye }}</span>
+                </td>
+                <td>
+                    <a href="{{ url_for('edit_patient', patient_id=patient.patient_id) }}" class="edit-btn">
+                        ✏️ Edit
+                    </a>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    {% else %}
+    <div class="no-results">
+        <div class="no-results-icon">🔍</div>
+        <h3 style="color: #2c3e50; margin-bottom: 10px;">No Patients Found</h3>
+        <p style="color: #7f8c8d;">
+            {% if search_query %}
+                Try a different search term or search by a different field.
+            {% else %}
+                No patients have been added to the database yet.
+            {% endif %}
+        </p>
+        {% if not search_query %}
+        <a href="{{ url_for('new_patient') }}" class="btn btn-success" style="margin-top: 20px;">
+            + Add First Patient
+        </a>
+        {% endif %}
+    </div>
+    {% endif %}
+</div>
+
+<script>
+function setSearchType(type) {
+    document.getElementById('search_type').value = type;
+
+    // Update button states
+    document.querySelectorAll('.search-type-btn').forEach(btn => {
+        btn.classList.remove('active');
+    });
+    event.target.classList.add('active');
+}
+</script>
+
+{% endblock %}

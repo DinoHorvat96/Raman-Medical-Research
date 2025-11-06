@@ -1,0 +1,1204 @@
+<!-- templates/edit_patient.html -->
+{% extends "base.html" %}
+
+{% block title %}Edit Patient #{{ patient.patient_id }} - Raman{% endblock %}
+
+{% block content %}
+<style>
+    .section-divider { border-bottom: 2px solid #ecf0f1; padding-bottom: 30px; margin-bottom: 30px; }
+    .section-title { color: #2c3e50; font-size: 18px; font-weight: 600; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 1px solid #ecf0f1; }
+    .subsection { background: #f8f9fa; padding: 20px; border-radius: 6px; margin-bottom: 20px; border-left: 4px solid #3498db; }
+    .field-group { display: flex; gap: 15px; align-items: flex-start; }
+    .field-group > * { flex: 1; }
+    .conditional-field { display: none; margin-top: 15px; padding-left: 20px; border-left: 3px solid #95a5a6; }
+    .conditional-field.active { display: block; }
+    .add-more-btn { padding: 8px 16px; background: #27ae60; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 13px; margin-top: 10px; }
+    .add-more-btn:hover { background: #229954; }
+    .remove-btn { padding: 6px 12px; background: #e74c3c; color: white; border: none; border-radius: 4px; cursor: pointer; font-size: 12px; margin-top: 10px; }
+    .remove-btn:hover { background: #c0392b; }
+    .repeatable-item { background: white; padding: 15px; border-radius: 6px; margin-bottom: 15px; border: 1px solid #ddd; position: relative; }
+    .date-input-group { display: grid; grid-template-columns: 1fr 1fr 2fr; gap: 10px; }
+    .form-help { font-size: 12px; color: #7f8c8d; margin-top: 5px; }
+    .locs-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+    select, input { font-size: 13px; }
+    .patient-info-banner { background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 20px 30px; border-radius: 8px; margin-bottom: 30px; display: flex; justify-content: space-between; align-items: center; }
+    .patient-info-banner h2 { margin: 0; font-size: 24px; }
+    .patient-info-banner p { margin: 5px 0 0 0; opacity: 0.9; font-size: 14px; }
+</style>
+
+<div class="patient-info-banner">
+    <div>
+        <h2>Edit Patient #{{ '%05d'|format(patient.patient_id) }}</h2>
+        <p>{{ patient.patient_name }}</p>
+    </div>
+    <div>
+        <a href="{{ url_for('validate_data') }}" class="btn btn-logout">← Back to Search</a>
+    </div>
+</div>
+
+<div class="card">
+    <form method="POST" id="patientForm">
+
+        <!-- GENERAL DATA -->
+        <div class="section-divider">
+            <h3 class="section-title">General Data</h3>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="patient_id">Patient ID (Read Only)</label>
+                    <input type="number" id="patient_id" name="patient_id" value="{{ patient.patient_id }}" readonly disabled style="background: #ecf0f1; cursor: not-allowed;">
+                    <small class="form-help">Patient ID cannot be changed</small>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="patient_name">Patient Name *</label>
+                    <input type="text" id="patient_name" name="patient_name" required value="{{ patient.patient_name }}" placeholder="First Name Last Name">
+                </div>
+                <div class="form-group">
+                    <label for="mbo">MBO (9 digits) *</label>
+                    <input type="text" id="mbo" name="mbo" required pattern="[0-9]{9}" maxlength="9" value="{{ patient.mbo }}" placeholder="123456789">
+                    <small class="form-help">Used to generate anonymous person hash</small>
+                </div>
+                <div class="form-group">
+                    <label for="sex">Sex *</label>
+                    <select id="sex" name="sex" required>
+                        <option value="M" {% if stats.sex == 'M' %}selected{% endif %}>M</option>
+                        <option value="F" {% if stats.sex == 'F' %}selected{% endif %}>F</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="form-row">
+                <div class="form-group">
+                    <label>Date of Birth *</label>
+                    <div class="date-input-group">
+                        <input type="number" name="dob_day" placeholder="DD" min="1" max="31" required value="{{ patient.date_of_birth.day if patient.date_of_birth else '' }}">
+                        <input type="number" name="dob_month" placeholder="MM" min="1" max="12" required value="{{ patient.date_of_birth.month if patient.date_of_birth else '' }}">
+                        <input type="number" name="dob_year" placeholder="YYYY" min="1900" max="2100" required value="{{ patient.date_of_birth.year if patient.date_of_birth else '' }}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>Date of Sample Collection *</label>
+                    <div class="date-input-group">
+                        <input type="number" name="collection_day" placeholder="DD" min="1" max="31" required value="{{ patient.date_of_sample_collection.day if patient.date_of_sample_collection else '' }}">
+                        <input type="number" name="collection_month" placeholder="MM" min="1" max="12" required value="{{ patient.date_of_sample_collection.month if patient.date_of_sample_collection else '' }}">
+                        <input type="number" name="collection_year" placeholder="YYYY" min="1900" max="2100" required value="{{ patient.date_of_sample_collection.year if patient.date_of_sample_collection else '' }}">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label for="eye">Eye *</label>
+                    <select id="eye" name="eye" required>
+                        <option value="L" {% if stats.eye == 'L' %}selected{% endif %}>L</option>
+                        <option value="R" {% if stats.eye == 'R' %}selected{% endif %}>R</option>
+                        <option value="ND" {% if stats.eye == 'ND' %}selected{% endif %}>ND</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+
+        <!-- MAIN OCULAR CONDITIONS START -->
+        <div class="section-divider">
+            <h3 class="section-title">Main Ocular Conditions</h3>
+            <!-- Lens Status -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="lens_status">Lens Status</label>
+                        <select id="lens_status" name="lens_status" onchange="handleLensStatus(this.value)">
+                            <option value="ND" {% if not conditions or conditions.lens_status == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="Phakic" {% if conditions and conditions.lens_status == 'Phakic' %}selected{% endif %}>Phakic</option>
+                            <option value="Pseudophakic" {% if conditions and conditions.lens_status == 'Pseudophakic' %}selected{% endif %}>Pseudophakic</option>
+                            <option value="Aphakic" {% if conditions and conditions.lens_status == 'Aphakic' %}selected{% endif %}>Aphakic</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="locs_fields" class="conditional-field {% if conditions and conditions.lens_status == 'Phakic' %}active{% endif %}">
+                    <label>LOCS III Grade (if Phakic)</label>
+                    <div class="locs-grid">
+                        <select name="locs_no">
+                            {% set locs_no_val = conditions.locs_iii_no if conditions else 'ND' %}
+                            {% for val in ['ND', '0.1', '0.3', '0.5', '1.0', '1.5', '2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5', '6.0', '6.5', '6.9'] %}
+                            <option value="{{ val }}" {% if locs_no_val == val %}selected{% endif %}>NO-{{ val }}</option>
+                            {% endfor %}
+                        </select>
+                        <select name="locs_nc">
+                            {% set locs_nc_val = conditions.locs_iii_nc if conditions else 'ND' %}
+                            {% for val in ['ND', '0.1', '0.3', '0.5', '1.0', '1.5', '2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5', '6.0', '6.5', '6.9'] %}
+                            <option value="{{ val }}" {% if locs_nc_val == val %}selected{% endif %}>NC-{{ val }}</option>
+                            {% endfor %}
+                        </select>
+                        <select name="locs_c">
+                            {% set locs_c_val = conditions.locs_iii_c if conditions else 'ND' %}
+                            {% for val in ['ND', '0.1', '0.3', '0.5', '1.0', '1.5', '2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5', '5.9'] %}
+                            <option value="{{ val }}" {% if locs_c_val == val %}selected{% endif %}>C-{{ val }}</option>
+                            {% endfor %}
+                        </select>
+                        <select name="locs_p">
+                            {% set locs_p_val = conditions.locs_iii_p if conditions else 'ND' %}
+                            {% for val in ['ND', '0.1', '0.3', '0.5', '1.0', '1.5', '2.0', '2.5', '3.0', '3.5', '4.0', '4.5', '5.0', '5.5', '5.9'] %}
+                            <option value="{{ val }}" {% if locs_p_val == val %}selected{% endif %}>P-{{ val }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                </div>
+
+                <div id="iol_fields" class="conditional-field {% if conditions and conditions.lens_status == 'Pseudophakic' %}active{% endif %}">
+                    <div class="form-group">
+                        <label for="iol_type">IOL Type (if Pseudophakic)</label>
+                        <select name="iol_type">
+                            {% set iol_val = conditions.iol_type if conditions else 'ND' %}
+                            <option value="ND" {% if iol_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="AC IOL" {% if iol_val == 'AC IOL' %}selected{% endif %}>AC IOL (anterior chamber)</option>
+                            <option value="IF IOL" {% if iol_val == 'IF IOL' %}selected{% endif %}>IF IOL (iris-fixated)</option>
+                            <option value="SF IOL" {% if iol_val == 'SF IOL' %}selected{% endif %}>SF IOL (sclera-fixated)</option>
+                            <option value="CS IOL" {% if iol_val == 'CS IOL' %}selected{% endif %}>CS IOL (ciliary sulcus)</option>
+                            <option value="PC IOL" {% if iol_val == 'PC IOL' %}selected{% endif %}>PC IOL (posterior chamber in-the-bag)</option>
+                            <option value="PIOL" {% if iol_val == 'PIOL' %}selected{% endif %}>PIOL (phakic IOL)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="aphakia_fields" class="conditional-field {% if conditions and conditions.lens_status == 'Aphakic' %}active{% endif %}">
+                    <div class="form-group">
+                        <label for="aphakia_etiology">Etiology (if Aphakic)</label>
+                        <select name="aphakia_etiology">
+                            {% set aphakia_val = conditions.aphakia_etiology if conditions else 'ND' %}
+                            <option value="ND" {% if aphakia_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="Congenital" {% if aphakia_val == 'Congenital' %}selected{% endif %}>Congenital</option>
+                            <option value="Acquired" {% if aphakia_val == 'Acquired' %}selected{% endif %}>Acquired</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Glaucoma -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="glaucoma">Glaucoma</label>
+                        <select id="glaucoma" name="glaucoma" onchange="handleGlaucoma(this.value)">
+                            {% set glaucoma_val = conditions.glaucoma if conditions else '0' %}
+                            <option value="0" {% if glaucoma_val == '0' %}selected{% endif %}>0</option>
+                            <option value="1" {% if glaucoma_val == '1' %}selected{% endif %}>1</option>
+                            <option value="ND" {% if glaucoma_val == 'ND' %}selected{% endif %}>ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="oht_pac_fields" class="conditional-field {% if (conditions and conditions.glaucoma == '0') or (not conditions) %}active{% endif %}">
+                    <div class="form-group">
+                        <label for="oht_or_pac">OHT or PAC (if Glaucoma = 0)</label>
+                        <select name="oht_or_pac">
+                            {% set oht_pac_val = conditions.oht_or_pac if conditions else '0' %}
+                            <option value="0" {% if oht_pac_val == '0' %}selected{% endif %}>0</option>
+                            <option value="OHT" {% if oht_pac_val == 'OHT' %}selected{% endif %}>OHT (Ocular Hypertension)</option>
+                            <option value="PAC" {% if oht_pac_val == 'PAC' %}selected{% endif %}>PAC (Primary Angle Closure)</option>
+                            <option value="ND" {% if oht_pac_val == 'ND' %}selected{% endif %}>ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="glaucoma_etiology_fields" class="conditional-field {% if conditions and conditions.glaucoma == '1' %}active{% endif %}">
+                    <div class="form-group">
+                        <label for="glaucoma_etiology">Etiology (if Glaucoma = 1)</label>
+                        <select name="glaucoma_etiology">
+                            {% set g_etiol_val = conditions.glaucoma_etiology if conditions else 'ND' %}
+                            <option value="ND" {% if g_etiol_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="POAG" {% if g_etiol_val == 'POAG' %}selected{% endif %}>POAG (primary open angle)</option>
+                            <option value="NTG" {% if g_etiol_val == 'NTG' %}selected{% endif %}>NTG (normal tension)</option>
+                            <option value="PCG" {% if g_etiol_val == 'PCG' %}selected{% endif %}>PCG (primary congenital)</option>
+                            <option value="JOAG" {% if g_etiol_val == 'JOAG' %}selected{% endif %}>JOAG (juvenile open angle)</option>
+                            <option value="PACG" {% if g_etiol_val == 'PACG' %}selected{% endif %}>PACG (primary angle closure)</option>
+                            <option value="PXG" {% if g_etiol_val == 'PXG' %}selected{% endif %}>PXG (pseudoexfoliation)</option>
+                            <option value="PG" {% if g_etiol_val == 'PG' %}selected{% endif %}>PG (pigmentary)</option>
+                            <option value="NVG" {% if g_etiol_val == 'NVG' %}selected{% endif %}>NVG (neovascular)</option>
+                            <option value="UG" {% if g_etiol_val == 'UG' %}selected{% endif %}>UG (uveitic)</option>
+                            <option value="TG" {% if g_etiol_val == 'TG' %}selected{% endif %}>TG (traumatic)</option>
+                            <option value="SOG" {% if g_etiol_val == 'SOG' %}selected{% endif %}>SOG (silicone oil)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Steroid Responder, PXS, PDS -->
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="steroid_responder">Steroid Responder</label>
+                    <select name="steroid_responder">
+                        {% set sr_val = conditions.steroid_responder if conditions else '0' %}
+                        <option value="0" {% if sr_val == '0' %}selected{% endif %}>0</option>
+                        <option value="1" {% if sr_val == '1' %}selected{% endif %}>1</option>
+                        <option value="ND" {% if sr_val == 'ND' %}selected{% endif %}>ND</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="pxs">PXS (Pseudoexfoliation Syndrome)</label>
+                    <select name="pxs">
+                        {% set pxs_val = conditions.pxs if conditions else '0' %}
+                        <option value="0" {% if pxs_val == '0' %}selected{% endif %}>0</option>
+                        <option value="1" {% if pxs_val == '1' %}selected{% endif %}>1</option>
+                        <option value="ND" {% if pxs_val == 'ND' %}selected{% endif %}>ND</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label for="pds">PDS (Pigment Dispersion Syndrome)</label>
+                    <select name="pds">
+                        {% set pds_val = conditions.pds if conditions else '0' %}
+                        <option value="0" {% if pds_val == '0' %}selected{% endif %}>0</option>
+                        <option value="1" {% if pds_val == '1' %}selected{% endif %}>1</option>
+                        <option value="ND" {% if pds_val == 'ND' %}selected{% endif %}>ND</option>
+                    </select>
+                </div>
+            </div>
+            <!-- Diabetic Retinopathy -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="diabetic_retinopathy">Diabetic Retinopathy</label>
+                        <select id="diabetic_retinopathy" name="diabetic_retinopathy" onchange="handleDR(this.value)">
+                            {% set dr_val = conditions.diabetic_retinopathy if conditions else '0' %}
+                            <option value="0" {% if dr_val == '0' %}selected{% endif %}>0</option>
+                            <option value="1" {% if dr_val == '1' %}selected{% endif %}>1</option>
+                            <option value="ND" {% if dr_val == 'ND' %}selected{% endif %}>ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="dr_stage_fields" class="conditional-field {% if conditions and conditions.diabetic_retinopathy == '1' %}active{% endif %}">
+                    <div class="form-group">
+                        <label for="dr_stage">Stage (Diabetic Retinopathy)</label>
+                        <select id="dr_stage" name="dr_stage" onchange="handleDRStage(this.value)">
+                            {% set dr_stage_val = conditions.dr_stage if conditions else 'ND' %}
+                            <option value="ND" {% if dr_stage_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="NPDR" {% if dr_stage_val == 'NPDR' %}selected{% endif %}>NPDR (nonproliferative)</option>
+                            <option value="PDR" {% if dr_stage_val == 'PDR' %}selected{% endif %}>PDR (proliferative)</option>
+                        </select>
+                    </div>
+
+                    <div id="npdr_stage_fields" class="conditional-field {% if conditions and conditions.dr_stage == 'NPDR' %}active{% endif %}">
+                        <div class="form-group">
+                            <label for="npdr_stage">Stage (NPDR)</label>
+                            <select name="npdr_stage">
+                                {% set npdr_val = conditions.npdr_stage if conditions else 'ND' %}
+                                <option value="ND" {% if npdr_val == 'ND' %}selected{% endif %}>ND</option>
+                                <option value="Mild" {% if npdr_val == 'Mild' %}selected{% endif %}>Mild</option>
+                                <option value="Moderate" {% if npdr_val == 'Moderate' %}selected{% endif %}>Moderate</option>
+                                <option value="Severe" {% if npdr_val == 'Severe' %}selected{% endif %}>Severe</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="pdr_stage_fields" class="conditional-field {% if conditions and conditions.dr_stage == 'PDR' %}active{% endif %}">
+                        <div class="form-group">
+                            <label for="pdr_stage">Stage (PDR)</label>
+                            <select name="pdr_stage">
+                                {% set pdr_val = conditions.pdr_stage if conditions else 'ND' %}
+                                <option value="ND" {% if pdr_val == 'ND' %}selected{% endif %}>ND</option>
+                                <option value="Active" {% if pdr_val == 'Active' %}selected{% endif %}>Active</option>
+                                <option value="Inactive" {% if pdr_val == 'Inactive' %}selected{% endif %}>Inactive</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Macular Edema -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="macular_edema">Macular Edema</label>
+                        <select id="macular_edema" name="macular_edema" onchange="handleME(this.value)">
+                            {% set me_val = conditions.macular_edema if conditions else '0' %}
+                            <option value="0" {% if me_val == '0' %}selected{% endif %}>0</option>
+                            <option value="1" {% if me_val == '1' %}selected{% endif %}>1</option>
+                            <option value="ND" {% if me_val == 'ND' %}selected{% endif %}>ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="me_etiology_fields" class="conditional-field {% if conditions and conditions.macular_edema == '1' %}active{% endif %}">
+                    <div class="form-group">
+                        <label for="me_etiology">Etiology (Macular Edema)</label>
+                        <select name="me_etiology">
+                            {% set me_etiol_val = conditions.me_etiology if conditions else 'ND' %}
+                            <option value="ND" {% if me_etiol_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="DME" {% if me_etiol_val == 'DME' %}selected{% endif %}>DME (diabetic macular edema)</option>
+                            <option value="RVO-ME" {% if me_etiol_val == 'RVO-ME' %}selected{% endif %}>RVO-ME (retinal vein occlusion edema)</option>
+                            <option value="IGS" {% if me_etiol_val == 'IGS' %}selected{% endif %}>IGS (Irvine-Gass syndrome / pseudophakic CME)</option>
+                            <option value="UME" {% if me_etiol_val == 'UME' %}selected{% endif %}>UME (uveitic macular edema)</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <!-- Macular Degeneration/Dystrophy -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="macular_degeneration">Macular Degeneration/Dystrophy</label>
+                        <select id="macular_degeneration" name="macular_degeneration" onchange="handleMD(this.value)">
+                            {% set md_val = conditions.macular_degeneration if conditions else '0' %}
+                            <option value="0" {% if md_val == '0' %}selected{% endif %}>0</option>
+                            <option value="1" {% if md_val == '1' %}selected{% endif %}>1</option>
+                            <option value="ND" {% if md_val == 'ND' %}selected{% endif %}>ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="md_etiology_fields" class="conditional-field {% if conditions and conditions.macular_degeneration == '1' %}active{% endif %}">
+                    <div class="form-group">
+                        <label for="md_etiology">Etiology</label>
+                        <select id="md_etiology" name="md_etiology" onchange="handleMDEtiology(this.value)">
+                            {% set md_etiol_val = conditions.md_etiology if conditions else 'ND' %}
+                            <option value="ND" {% if md_etiol_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="AMD" {% if md_etiol_val == 'AMD' %}selected{% endif %}>AMD</option>
+                            <option value="Other" {% if md_etiol_val == 'Other' %}selected{% endif %}>Other</option>
+                        </select>
+                    </div>
+
+                    <div id="amd_stage_fields" class="conditional-field {% if conditions and conditions.md_etiology == 'AMD' %}active{% endif %}">
+                        <div class="form-group">
+                            <label for="amd_stage">Stage (AMD)</label>
+                            <select id="amd_stage" name="amd_stage" onchange="handleAMDStage(this.value)">
+                                {% set amd_stage_val = conditions.amd_stage if conditions else 'ND' %}
+                                <option value="ND" {% if amd_stage_val == 'ND' %}selected{% endif %}>ND</option>
+                                <option value="Early" {% if amd_stage_val == 'Early' %}selected{% endif %}>Early</option>
+                                <option value="Intermediate" {% if amd_stage_val == 'Intermediate' %}selected{% endif %}>Intermediate</option>
+                                <option value="nAMD" {% if amd_stage_val == 'nAMD' %}selected{% endif %}>nAMD (neovascular)</option>
+                                <option value="GA" {% if amd_stage_val == 'GA' %}selected{% endif %}>GA (geographic atrophy)</option>
+                                <option value="nAMD+GA" {% if amd_stage_val == 'nAMD+GA' %}selected{% endif %}>nAMD+GA (neovascular with atrophy)</option>
+                            </select>
+                        </div>
+
+                        <div id="amd_exudation_fields" class="conditional-field {% if conditions and conditions.amd_stage in ['nAMD', 'nAMD+GA', 'ND'] %}active{% endif %}">
+                            <div class="form-group">
+                                <label for="amd_exudation">Exudation (AMD)</label>
+                                <select name="amd_exudation">
+                                    {% set amd_exud_val = conditions.amd_exudation if conditions else '0' %}
+                                    <option value="0" {% if amd_exud_val == '0' %}selected{% endif %}>0</option>
+                                    <option value="1" {% if amd_exud_val == '1' %}selected{% endif %}>1</option>
+                                    <option value="ND" {% if amd_exud_val == 'ND' %}selected{% endif %}>ND</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="other_md_stage_fields" class="conditional-field {% if conditions and conditions.md_etiology in ['Other', 'ND'] %}active{% endif %}">
+                        <div class="form-group">
+                            <label for="other_md_stage">Stage (Other Macular Degeneration/Dystrophy)</label>
+                            <select id="other_md_stage" name="other_md_stage" onchange="handleOtherMDStage(this.value)">
+                                {% set other_md_stage_val = conditions.other_md_stage if conditions else 'ND' %}
+                                <option value="ND" {% if other_md_stage_val == 'ND' %}selected{% endif %}>ND</option>
+                                <option value="Non-neovascular" {% if other_md_stage_val == 'Non-neovascular' %}selected{% endif %}>Non-neovascular</option>
+                                <option value="Neovascular" {% if other_md_stage_val == 'Neovascular' %}selected{% endif %}>Neovascular</option>
+                            </select>
+                        </div>
+
+                        <div id="other_md_exudation_fields" class="conditional-field {% if conditions and conditions.other_md_stage != 'ND' %}active{% endif %}">
+                            <div class="form-group">
+                                <label for="other_md_exudation">Exudation (Other Macular Degeneration/Dystrophy)</label>
+                                <select name="other_md_exudation">
+                                    {% set other_md_exud_val = conditions.other_md_exudation if conditions else '0' %}
+                                    <option value="0" {% if other_md_exud_val == '0' %}selected{% endif %}>0</option>
+                                    <option value="1" {% if other_md_exud_val == '1' %}selected{% endif %}>1</option>
+                                    <option value="ND" {% if other_md_exud_val == 'ND' %}selected{% endif %}>ND</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <!-- Macular Hole / Vitreomacular Traction -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="mh_vmt">Macular Hole / Vitreomacular Traction</label>
+                        <select id="mh_vmt" name="mh_vmt" onchange="handleMHVMT(this.value)">
+                            {% set mh_vmt_val = conditions.mh_vmt if conditions else '0' %}
+                            <option value="0" {% if mh_vmt_val == '0' %}selected{% endif %}>0</option>
+                            <option value="1" {% if mh_vmt_val == '1' %}selected{% endif %}>1</option>
+                            <option value="ND" {% if mh_vmt_val == 'ND' %}selected{% endif %}>ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="mh_vmt_fields" class="conditional-field {% if conditions and conditions.mh_vmt == '1' %}active{% endif %}">
+                    <div class="form-group">
+                        <label for="mh_vmt_etiology">Etiology (MH/VMT)</label>
+                        <select id="mh_vmt_etiology" name="mh_vmt_etiology" onchange="handleMHVMTEtiology(this.value)">
+                            {% set mh_vmt_etiol_val = conditions.mh_vmt_etiology if conditions else 'ND' %}
+                            <option value="ND" {% if mh_vmt_etiol_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="Idiopathic" {% if mh_vmt_etiol_val == 'Idiopathic' %}selected{% endif %}>Idiopathic</option>
+                            <option value="Secondary" {% if mh_vmt_etiol_val == 'Secondary' %}selected{% endif %}>Secondary</option>
+                        </select>
+                    </div>
+
+                    <div id="secondary_mh_vmt_fields" class="conditional-field {% if conditions and conditions.mh_vmt_etiology == 'Secondary' %}active{% endif %}">
+                        <div class="form-group">
+                            <label for="secondary_mh_vmt_cause">Cause (Secondary MH/VMT)</label>
+                            <select name="secondary_mh_vmt_cause">
+                                {% set sec_mh_vmt_val = conditions.secondary_mh_vmt_cause if conditions else 'ND' %}
+                                <option value="ND" {% if sec_mh_vmt_val == 'ND' %}selected{% endif %}>ND</option>
+                                <option value="MTM" {% if sec_mh_vmt_val == 'MTM' %}selected{% endif %}>MTM (myopic traction maculopathy)</option>
+                                <option value="Retinal detachment" {% if sec_mh_vmt_val == 'Retinal detachment' %}selected{% endif %}>Retinal detachment</option>
+                                <option value="Ocular trauma or surgery" {% if sec_mh_vmt_val == 'Ocular trauma or surgery' %}selected{% endif %}>Ocular trauma or surgery</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="mh_vmt_treatment_status">Treatment Status Prior to Sample Collection (MH/VMT)</label>
+                        <select name="mh_vmt_treatment_status">
+                            {% set mh_vmt_tx_val = conditions.mh_vmt_treatment_status if conditions else 'ND' %}
+                            <option value="ND" {% if mh_vmt_tx_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="Untreated" {% if mh_vmt_tx_val == 'Untreated' %}selected{% endif %}>Untreated</option>
+                            <option value="Treated-persistent/recurrent" {% if mh_vmt_tx_val == 'Treated-persistent/recurrent' %}selected{% endif %}>Treated - persistent/recurrent</option>
+                            <option value="Treated-closed" {% if mh_vmt_tx_val == 'Treated-closed' %}selected{% endif %}>Treated - closed</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Epiretinal Membrane -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="epiretinal_membrane">Epiretinal Membrane</label>
+                        <select id="epiretinal_membrane" name="epiretinal_membrane" onchange="handleERM(this.value)">
+                            {% set erm_val = conditions.epiretinal_membrane if conditions else '0' %}
+                            <option value="0" {% if erm_val == '0' %}selected{% endif %}>0</option>
+                            <option value="1" {% if erm_val == '1' %}selected{% endif %}>1</option>
+                            <option value="ND" {% if erm_val == 'ND' %}selected{% endif %}>ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="erm_fields" class="conditional-field {% if conditions and conditions.epiretinal_membrane == '1' %}active{% endif %}">
+                    <div class="form-group">
+                        <label for="erm_etiology">Etiology (ERM)</label>
+                        <select id="erm_etiology" name="erm_etiology" onchange="handleERMEtiology(this.value)">
+                            {% set erm_etiol_val = conditions.erm_etiology if conditions else 'ND' %}
+                            <option value="ND" {% if erm_etiol_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="Idiopathic" {% if erm_etiol_val == 'Idiopathic' %}selected{% endif %}>Idiopathic</option>
+                            <option value="Secondary" {% if erm_etiol_val == 'Secondary' %}selected{% endif %}>Secondary</option>
+                        </select>
+                    </div>
+
+                    <div id="secondary_erm_fields" class="conditional-field {% if conditions and conditions.erm_etiology == 'Secondary' %}active{% endif %}">
+                        <div class="form-group">
+                            <label for="secondary_erm_cause">Cause (Secondary ERM)</label>
+                            <select name="secondary_erm_cause">
+                                {% set sec_erm_val = conditions.secondary_erm_cause if conditions else 'ND' %}
+                                <option value="ND" {% if sec_erm_val == 'ND' %}selected{% endif %}>ND</option>
+                                <option value="DR" {% if sec_erm_val == 'DR' %}selected{% endif %}>DR (diabetic retinopathy)</option>
+                                <option value="RVO" {% if sec_erm_val == 'RVO' %}selected{% endif %}>RVO (retinal vein occlusion)</option>
+                                <option value="Intraocular inflammation" {% if sec_erm_val == 'Intraocular inflammation' %}selected{% endif %}>Intraocular inflammation</option>
+                                <option value="MTM" {% if sec_erm_val == 'MTM' %}selected{% endif %}>MTM</option>
+                                <option value="Retinal tear" {% if sec_erm_val == 'Retinal tear' %}selected{% endif %}>Retinal tear</option>
+                                <option value="RD/PVR" {% if sec_erm_val == 'RD/PVR' %}selected{% endif %}>RD/PVR</option>
+                                <option value="Ocular trauma or surgery" {% if sec_erm_val == 'Ocular trauma or surgery' %}selected{% endif %}>Ocular trauma or surgery</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="erm_treatment_status">Treatment Status Prior to Sample Collection (ERM)</label>
+                        <select name="erm_treatment_status">
+                            {% set erm_tx_val = conditions.erm_treatment_status if conditions else 'ND' %}
+                            <option value="ND" {% if erm_tx_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="Untreated" {% if erm_tx_val == 'Untreated' %}selected{% endif %}>Untreated</option>
+                            <option value="Treated-recurrent" {% if erm_tx_val == 'Treated-recurrent' %}selected{% endif %}>Treated - recurrent</option>
+                            <option value="Treated-removed" {% if erm_tx_val == 'Treated-removed' %}selected{% endif %}>Treated - removed</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+            <!-- Retinal Detachment/Redetachment -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="retinal_detachment">Retinal Detachment/Redetachment</label>
+                        <select id="retinal_detachment" name="retinal_detachment" onchange="handleRD(this.value)">
+                            {% set rd_val = conditions.retinal_detachment if conditions else '0' %}
+                            <option value="0" {% if rd_val == '0' %}selected{% endif %}>0</option>
+                            <option value="Current detachment" {% if rd_val == 'Current detachment' %}selected{% endif %}>Current detachment</option>
+                            <option value="Current redetachment" {% if rd_val == 'Current redetachment' %}selected{% endif %}>Current redetachment</option>
+                            <option value="Previous detachment" {% if rd_val == 'Previous detachment' %}selected{% endif %}>Previous detachment</option>
+                            <option value="Previous redetachment" {% if rd_val == 'Previous redetachment' %}selected{% endif %}>Previous redetachment</option>
+                            <option value="ND" {% if rd_val == 'ND' %}selected{% endif %}>ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="rd_fields" class="conditional-field {% if conditions and conditions.retinal_detachment not in ['0', 'ND'] %}active{% endif %}">
+                    <div class="form-group">
+                        <label for="rd_etiology">Etiology (RD)</label>
+                        <select name="rd_etiology">
+                            {% set rd_etiol_val = conditions.rd_etiology if conditions else 'ND' %}
+                            <option value="ND" {% if rd_etiol_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="Rhegmatogenous" {% if rd_etiol_val == 'Rhegmatogenous' %}selected{% endif %}>Rhegmatogenous</option>
+                            <option value="Tractional" {% if rd_etiol_val == 'Tractional' %}selected{% endif %}>Tractional</option>
+                            <option value="Combined" {% if rd_etiol_val == 'Combined' %}selected{% endif %}>Combined</option>
+                            <option value="Serous/Exudative" {% if rd_etiol_val == 'Serous/Exudative' %}selected{% endif %}>Serous/Exudative</option>
+                            <option value="Haemorrhagic" {% if rd_etiol_val == 'Haemorrhagic' %}selected{% endif %}>Haemorrhagic</option>
+                            <option value="MTM" {% if rd_etiol_val == 'MTM' %}selected{% endif %}>MTM</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="rd_treatment_status">Treatment Status Prior to Sample Collection (RD)</label>
+                        <select name="rd_treatment_status">
+                            {% set rd_tx_val = conditions.rd_treatment_status if conditions else 'ND' %}
+                            <option value="ND" {% if rd_tx_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="Untreated" {% if rd_tx_val == 'Untreated' %}selected{% endif %}>Untreated</option>
+                            <option value="Treated (PPV + oil tamponade)" {% if rd_tx_val == 'Treated (PPV + oil tamponade)' %}selected{% endif %}>Treated (PPV + oil tamponade)</option>
+                            <option value="Treated (PPV + gas tamponade)" {% if rd_tx_val == 'Treated (PPV + gas tamponade)' %}selected{% endif %}>Treated (PPV + gas tamponade)</option>
+                            <option value="Treated (pneumoretinopexy)" {% if rd_tx_val == 'Treated (pneumoretinopexy)' %}selected{% endif %}>Treated (pneumoretinopexy)</option>
+                            <option value="Treated (other procedures)" {% if rd_tx_val == 'Treated (other procedures)' %}selected{% endif %}>Treated (other procedures)</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="pvr">PVR</label>
+                        <select name="pvr">
+                            {% set pvr_val = conditions.pvr if conditions else '0' %}
+                            <option value="0" {% if pvr_val == '0' %}selected{% endif %}>0</option>
+                            <option value="1" {% if pvr_val == '1' %}selected{% endif %}>1</option>
+                            <option value="ND" {% if pvr_val == 'ND' %}selected{% endif %}>ND</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Vitreous Haemorrhage / Other Vitreous Opacification -->
+            <div class="subsection">
+                <div class="field-group">
+                    <div class="form-group">
+                        <label for="vitreous_opacification">Vitreous Haemorrhage / Other Vitreous Opacification</label>
+                        <select id="vitreous_opacification" name="vitreous_opacification" onchange="handleVO(this.value)">
+                            {% set vo_val = conditions.vitreous_opacification if conditions else '0' %}
+                            <option value="0" {% if vo_val == '0' %}selected{% endif %}>0</option>
+                            <option value="Vitreous haemorrhage" {% if vo_val == 'Vitreous haemorrhage' %}selected{% endif %}>Vitreous haemorrhage</option>
+                            <option value="Synchisis scintillans" {% if vo_val == 'Synchisis scintillans' %}selected{% endif %}>Synchisis scintillans</option>
+                            <option value="Asteroid hyalosis" {% if vo_val == 'Asteroid hyalosis' %}selected{% endif %}>Asteroid hyalosis</option>
+                            <option value="Vitritis" {% if vo_val == 'Vitritis' %}selected{% endif %}>Vitritis</option>
+                            <option value="Vitreoretinal lymphoma" {% if vo_val == 'Vitreoretinal lymphoma' %}selected{% endif %}>Vitreoretinal lymphoma</option>
+                            <option value="Endophthalmitis" {% if vo_val == 'Endophthalmitis' %}selected{% endif %}>Endophthalmitis</option>
+                            <option value="ND" {% if vo_val == 'ND' %}selected{% endif %}>ND</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div id="vh_etiology_fields" class="conditional-field {% if conditions and conditions.vitreous_opacification == 'Vitreous haemorrhage' %}active{% endif %}">
+                    <div class="form-group">
+                        <label for="vh_etiology">Etiology (Vitreous Haemorrhage)</label>
+                        <select name="vh_etiology">
+                            {% set vh_etiol_val = conditions.vh_etiology if conditions else 'ND' %}
+                            <option value="ND" {% if vh_etiol_val == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="PDR" {% if vh_etiol_val == 'PDR' %}selected{% endif %}>PDR</option>
+                            <option value="RVO" {% if vh_etiol_val == 'RVO' %}selected{% endif %}>RVO</option>
+                            <option value="nAMD" {% if vh_etiol_val == 'nAMD' %}selected{% endif %}>nAMD</option>
+                            <option value="Retinal tear / Retinal detachment" {% if vh_etiol_val == 'Retinal tear / Retinal detachment' %}selected{% endif %}>Retinal tear / Retinal detachment</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+        </div>
+        <!-- OTHER OCULAR CONDITIONS (ICD-10) -->
+        <div class="section-divider">
+            <h3 class="section-title">Other Ocular Conditions (ICD-10)</h3>
+
+            <div id="other_ocular_conditions_container">
+                {% if other_conditions and other_conditions|length > 0 %}
+                    {% for oc in other_conditions %}
+                    <div class="repeatable-item">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>ICD-10 Code</label>
+                                <select name="other_ocular_condition[]">
+                                    <option value="0">0</option>
+                                    <option value="ND" {% if oc.icd10_code == 'ND' %}selected{% endif %}>ND</option>
+                                    <option value="H00" {% if oc.icd10_code == 'H00' %}selected{% endif %}>H00 - Hordeolum and chalazion</option>
+                                    <option value="H01" {% if oc.icd10_code == 'H01' %}selected{% endif %}>H01 - Other inflammation of eyelid</option>
+                                    <option value="H02" {% if oc.icd10_code == 'H02' %}selected{% endif %}>H02 - Other disorders of eyelid</option>
+                                    <option value="H04" {% if oc.icd10_code == 'H04' %}selected{% endif %}>H04 - Disorders of lacrimal system</option>
+                                    <option value="H05" {% if oc.icd10_code == 'H05' %}selected{% endif %}>H05 - Disorders of orbit</option>
+                                    <option value="H10" {% if oc.icd10_code == 'H10' %}selected{% endif %}>H10 - Conjunctivitis</option>
+                                    <option value="H11" {% if oc.icd10_code == 'H11' %}selected{% endif %}>H11 - Other disorders of conjunctiva</option>
+                                    <option value="H15" {% if oc.icd10_code == 'H15' %}selected{% endif %}>H15 - Disorders of sclera</option>
+                                    <option value="H16" {% if oc.icd10_code == 'H16' %}selected{% endif %}>H16 - Keratitis</option>
+                                    <option value="H17" {% if oc.icd10_code == 'H17' %}selected{% endif %}>H17 - Corneal scars and opacities</option>
+                                    <option value="H18" {% if oc.icd10_code == 'H18' %}selected{% endif %}>H18 - Other disorders of cornea</option>
+                                    <option value="H20" {% if oc.icd10_code == 'H20' %}selected{% endif %}>H20 - Iridocyclitis</option>
+                                    <option value="H21" {% if oc.icd10_code == 'H21' %}selected{% endif %}>H21 - Other disorders of iris and ciliary body</option>
+                                    <option value="H25" {% if oc.icd10_code == 'H25' %}selected{% endif %}>H25 - Senile cataract</option>
+                                    <option value="H26" {% if oc.icd10_code == 'H26' %}selected{% endif %}>H26 - Other cataract</option>
+                                    <option value="H27" {% if oc.icd10_code == 'H27' %}selected{% endif %}>H27 - Other disorders of lens</option>
+                                    <option value="H30" {% if oc.icd10_code == 'H30' %}selected{% endif %}>H30 - Chorioretinal inflammation</option>
+                                    <option value="H31" {% if oc.icd10_code == 'H31' %}selected{% endif %}>H31 - Other disorders of choroid</option>
+                                    <option value="H33" {% if oc.icd10_code == 'H33' %}selected{% endif %}>H33 - Retinal detachments and breaks</option>
+                                    <option value="H34" {% if oc.icd10_code == 'H34' %}selected{% endif %}>H34 - Retinal vascular occlusions</option>
+                                    <option value="H35" {% if oc.icd10_code == 'H35' %}selected{% endif %}>H35 - Other retinal disorders</option>
+                                    <option value="H36" {% if oc.icd10_code == 'H36' %}selected{% endif %}>H36 - Retinal disorders in diseases</option>
+                                    <option value="H40" {% if oc.icd10_code == 'H40' %}selected{% endif %}>H40 - Glaucoma</option>
+                                    <option value="H43" {% if oc.icd10_code == 'H43' %}selected{% endif %}>H43 - Disorders of vitreous body</option>
+                                    <option value="H44" {% if oc.icd10_code == 'H44' %}selected{% endif %}>H44 - Disorders of globe</option>
+                                    <option value="H46" {% if oc.icd10_code == 'H46' %}selected{% endif %}>H46 - Optic neuritis</option>
+                                    <option value="H47" {% if oc.icd10_code == 'H47' %}selected{% endif %}>H47 - Other disorders of optic nerve</option>
+                                    <option value="H49" {% if oc.icd10_code == 'H49' %}selected{% endif %}>H49 - Paralytic strabismus</option>
+                                    <option value="H50" {% if oc.icd10_code == 'H50' %}selected{% endif %}>H50 - Other strabismus</option>
+                                    <option value="H52" {% if oc.icd10_code == 'H52' %}selected{% endif %}>H52 - Disorders of refraction</option>
+                                    <option value="H53" {% if oc.icd10_code == 'H53' %}selected{% endif %}>H53 - Visual disturbances</option>
+                                    <option value="H54" {% if oc.icd10_code == 'H54' %}selected{% endif %}>H54 - Blindness and low vision</option>
+                                </select>
+                            </div>
+
+                            <div class="form-group">
+                                <label>Eye</label>
+                                <select name="other_ocular_condition_eye[]">
+                                    <option value="ND" {% if oc.eye == 'ND' %}selected{% endif %}>ND</option>
+                                    <option value="R" {% if oc.eye == 'R' %}selected{% endif %}>R</option>
+                                    <option value="L" {% if oc.eye == 'L' %}selected{% endif %}>L</option>
+                                    <option value="R+L" {% if oc.eye == 'R+L' %}selected{% endif %}>R+L</option>
+                                </select>
+                            </div>
+                        </div>
+                        {% if not loop.first %}
+                        <button type="button" class="remove-btn" onclick="this.parentElement.remove()">✕ Remove</button>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="repeatable-item">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>ICD-10 Code</label>
+                            <select name="other_ocular_condition[]">
+                                <option value="0" selected>0</option>
+                                <option value="ND">ND</option>
+                                <option value="H00">H00 - Hordeolum and chalazion</option>
+                                <option value="H01">H01 - Other inflammation of eyelid</option>
+                                <option value="H02">H02 - Other disorders of eyelid</option>
+                                <option value="H04">H04 - Disorders of lacrimal system</option>
+                                <option value="H05">H05 - Disorders of orbit</option>
+                                <option value="H10">H10 - Conjunctivitis</option>
+                                <option value="H11">H11 - Other disorders of conjunctiva</option>
+                                <option value="H15">H15 - Disorders of sclera</option>
+                                <option value="H16">H16 - Keratitis</option>
+                                <option value="H17">H17 - Corneal scars and opacities</option>
+                                <option value="H18">H18 - Other disorders of cornea</option>
+                                <option value="H20">H20 - Iridocyclitis</option>
+                                <option value="H21">H21 - Other disorders of iris and ciliary body</option>
+                                <option value="H25">H25 - Senile cataract</option>
+                                <option value="H26">H26 - Other cataract</option>
+                                <option value="H27">H27 - Other disorders of lens</option>
+                                <option value="H30">H30 - Chorioretinal inflammation</option>
+                                <option value="H31">H31 - Other disorders of choroid</option>
+                                <option value="H33">H33 - Retinal detachments and breaks</option>
+                                <option value="H34">H34 - Retinal vascular occlusions</option>
+                                <option value="H35">H35 - Other retinal disorders</option>
+                                <option value="H36">H36 - Retinal disorders in diseases</option>
+                                <option value="H40">H40 - Glaucoma</option>
+                                <option value="H43">H43 - Disorders of vitreous body</option>
+                                <option value="H44">H44 - Disorders of globe</option>
+                                <option value="H46">H46 - Optic neuritis</option>
+                                <option value="H47">H47 - Other disorders of optic nerve</option>
+                                <option value="H49">H49 - Paralytic strabismus</option>
+                                <option value="H50">H50 - Other strabismus</option>
+                                <option value="H52">H52 - Disorders of refraction</option>
+                                <option value="H53">H53 - Visual disturbances</option>
+                                <option value="H54">H54 - Blindness and low vision</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Eye</label>
+                            <select name="other_ocular_condition_eye[]">
+                                <option value="ND" selected>ND</option>
+                                <option value="R">R</option>
+                                <option value="L">L</option>
+                                <option value="R+L">R+L</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <button type="button" class="add-more-btn" onclick="addOtherOcularCondition()">+ Add Another Condition</button>
+        </div>
+
+        <!-- PREVIOUS OCULAR SURGERY OR LASER TREATMENT -->
+        <div class="section-divider">
+            <h3 class="section-title">Previous Ocular Surgery or Laser Treatment</h3>
+
+            <div id="previous_surgeries_container">
+                {% if surgeries and surgeries|length > 0 %}
+                    {% for surgery in surgeries %}
+                    <div class="repeatable-item">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Surgery/Procedure</label>
+                                <select name="previous_surgery[]">
+                                    <option value="0">0</option>
+                                    <option value="ND" {% if surgery.surgery_code == 'ND' %}selected{% endif %}>ND</option>
+                                    <option value="PPV" {% if surgery.surgery_code == 'PPV' %}selected{% endif %}>PPV</option>
+                                    <option value="Cataract surgery" {% if surgery.surgery_code == 'Cataract surgery' %}selected{% endif %}>Cataract surgery</option>
+                                    <option value="Trabeculectomy" {% if surgery.surgery_code == 'Trabeculectomy' %}selected{% endif %}>Trabeculectomy</option>
+                                    <option value="PRP" {% if surgery.surgery_code == 'PRP' %}selected{% endif %}>PRP</option>
+                                    <option value="Anti-VEGF injection" {% if surgery.surgery_code == 'Anti-VEGF injection' %}selected{% endif %}>Anti-VEGF injection</option>
+                                    <option value="YAG capsulotomy" {% if surgery.surgery_code == 'YAG capsulotomy' %}selected{% endif %}>YAG capsulotomy</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Eye</label>
+                                <select name="previous_surgery_eye[]">
+                                    <option value="ND" {% if surgery.eye == 'ND' %}selected{% endif %}>ND</option>
+                                    <option value="R" {% if surgery.eye == 'R' %}selected{% endif %}>R</option>
+                                    <option value="L" {% if surgery.eye == 'L' %}selected{% endif %}>L</option>
+                                    <option value="R+L" {% if surgery.eye == 'R+L' %}selected{% endif %}>R+L</option>
+                                </select>
+                            </div>
+                        </div>
+                        {% if not loop.first %}
+                        <button type="button" class="remove-btn" onclick="this.parentElement.remove()">✕ Remove</button>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="repeatable-item">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Surgery/Procedure</label>
+                            <select name="previous_surgery[]">
+                                <option value="0" selected>0</option>
+                                <option value="ND">ND</option>
+                                <option value="PPV">PPV</option>
+                                <option value="Cataract surgery">Cataract surgery</option>
+                                <option value="Trabeculectomy">Trabeculectomy</option>
+                                <option value="PRP">PRP</option>
+                                <option value="Anti-VEGF injection">Anti-VEGF injection</option>
+                                <option value="YAG capsulotomy">YAG capsulotomy</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Eye</label>
+                            <select name="previous_surgery_eye[]">
+                                <option value="ND" selected>ND</option>
+                                <option value="R">R</option>
+                                <option value="L">L</option>
+                                <option value="R+L">R+L</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <button type="button" class="add-more-btn" onclick="addPreviousSurgery()">+ Add Another Surgery</button>
+        </div>
+
+        <!-- SYSTEMIC CONDITIONS (ICD-10) -->
+        <div class="section-divider">
+            <h3 class="section-title">Other/Systemic Conditions (ICD-10)</h3>
+
+            <div id="systemic_conditions_container">
+                {% if systemic and systemic|length > 0 %}
+                    {% for condition in systemic %}
+                    <div class="repeatable-item">
+                        <div class="form-group">
+                            <label>ICD-10 Code</label>
+                            <select name="systemic_condition[]">
+                                <option value="0">0</option>
+                                <option value="ND" {% if condition.icd10_code == 'ND' %}selected{% endif %}>ND</option>
+                                <option value="E10" {% if condition.icd10_code == 'E10' %}selected{% endif %}>E10 - Type 1 diabetes</option>
+                                <option value="E11" {% if condition.icd10_code == 'E11' %}selected{% endif %}>E11 - Type 2 diabetes</option>
+                                <option value="I10" {% if condition.icd10_code == 'I10' %}selected{% endif %}>I10 - Hypertension</option>
+                                <option value="I50" {% if condition.icd10_code == 'I50' %}selected{% endif %}>I50 - Heart failure</option>
+                                <option value="N18" {% if condition.icd10_code == 'N18' %}selected{% endif %}>N18 - Chronic kidney disease</option>
+                            </select>
+                        </div>
+                        {% if not loop.first %}
+                        <button type="button" class="remove-btn" onclick="this.parentElement.remove()">✕ Remove</button>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="repeatable-item">
+                    <div class="form-group">
+                        <label>ICD-10 Code</label>
+                        <select name="systemic_condition[]">
+                            <option value="0" selected>0</option>
+                            <option value="ND">ND</option>
+                            <option value="E10">E10 - Type 1 diabetes</option>
+                            <option value="E11">E11 - Type 2 diabetes</option>
+                            <option value="I10">I10 - Hypertension</option>
+                            <option value="I50">I50 - Heart failure</option>
+                            <option value="N18">N18 - Chronic kidney disease</option>
+                        </select>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <button type="button" class="add-more-btn" onclick="addSystemicCondition()">+ Add Another Condition</button>
+        </div>
+        <!-- OCULAR MEDICATIONS -->
+        <div class="section-divider">
+            <h3 class="section-title">Ocular Medications</h3>
+
+            <div id="ocular_medications_container">
+                {% if ocular_meds and ocular_meds|length > 0 %}
+                    {% for med in ocular_meds %}
+                    <div class="repeatable-item">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Medication (Generic Name)</label>
+                                <select name="ocular_medication[]">
+                                    <option value="0">0</option>
+                                    <option value="ND" {% if med.generic_name == 'ND' %}selected{% endif %}>ND</option>
+                                    <option value="Latanoprost" {% if med.generic_name == 'Latanoprost' %}selected{% endif %}>Latanoprost</option>
+                                    <option value="Timolol" {% if med.generic_name == 'Timolol' %}selected{% endif %}>Timolol</option>
+                                    <option value="Dorzolamide" {% if med.generic_name == 'Dorzolamide' %}selected{% endif %}>Dorzolamide</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Eye</label>
+                                <select name="ocular_medication_eye[]">
+                                    <option value="ND" {% if med.eye == 'ND' %}selected{% endif %}>ND</option>
+                                    <option value="R" {% if med.eye == 'R' %}selected{% endif %}>R</option>
+                                    <option value="L" {% if med.eye == 'L' %}selected{% endif %}>L</option>
+                                    <option value="R+L" {% if med.eye == 'R+L' %}selected{% endif %}>R+L</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Days Before Collection (000-999)</label>
+                                <input type="number" name="ocular_medication_days[]" min="0" max="999" value="{{ med.days_before_collection if med.days_before_collection else '' }}" placeholder="000">
+                            </div>
+                        </div>
+                        {% if not loop.first %}
+                        <button type="button" class="remove-btn" onclick="this.parentElement.remove()">✕ Remove</button>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="repeatable-item">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Medication (Generic Name)</label>
+                            <select name="ocular_medication[]">
+                                <option value="0" selected>0</option>
+                                <option value="ND">ND</option>
+                                <option value="Latanoprost">Latanoprost</option>
+                                <option value="Timolol">Timolol</option>
+                                <option value="Dorzolamide">Dorzolamide</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Eye</label>
+                            <select name="ocular_medication_eye[]">
+                                <option value="ND" selected>ND</option>
+                                <option value="R">R</option>
+                                <option value="L">L</option>
+                                <option value="R+L">R+L</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Days Before Collection (000-999)</label>
+                            <input type="number" name="ocular_medication_days[]" min="0" max="999" placeholder="000">
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <button type="button" class="add-more-btn" onclick="addOcularMedication()">+ Add Another Medication</button>
+        </div>
+
+        <!-- SYSTEMIC MEDICATIONS -->
+        <div class="section-divider">
+            <h3 class="section-title">Other/Systemic Medications</h3>
+
+            <div id="systemic_medications_container">
+                {% if systemic_meds and systemic_meds|length > 0 %}
+                    {% for med in systemic_meds %}
+                    <div class="repeatable-item">
+                        <div class="form-row">
+                            <div class="form-group">
+                                <label>Medication (Generic Name)</label>
+                                <select name="systemic_medication[]">
+                                    <option value="0">0</option>
+                                    <option value="ND" {% if med.generic_name == 'ND' %}selected{% endif %}>ND</option>
+                                    <option value="Metformin" {% if med.generic_name == 'Metformin' %}selected{% endif %}>Metformin</option>
+                                    <option value="Insulin" {% if med.generic_name == 'Insulin' %}selected{% endif %}>Insulin</option>
+                                    <option value="Amlodipine" {% if med.generic_name == 'Amlodipine' %}selected{% endif %}>Amlodipine</option>
+                                </select>
+                            </div>
+                            <div class="form-group">
+                                <label>Days Before Collection (000-999)</label>
+                                <input type="number" name="systemic_medication_days[]" min="0" max="999" value="{{ med.days_before_collection if med.days_before_collection else '' }}" placeholder="000">
+                            </div>
+                        </div>
+                        {% if not loop.first %}
+                        <button type="button" class="remove-btn" onclick="this.parentElement.remove()">✕ Remove</button>
+                        {% endif %}
+                    </div>
+                    {% endfor %}
+                {% else %}
+                <div class="repeatable-item">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>Medication (Generic Name)</label>
+                            <select name="systemic_medication[]">
+                                <option value="0" selected>0</option>
+                                <option value="ND">ND</option>
+                                <option value="Metformin">Metformin</option>
+                                <option value="Insulin">Insulin</option>
+                                <option value="Amlodipine">Amlodipine</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label>Days Before Collection (000-999)</label>
+                            <input type="number" name="systemic_medication_days[]" min="0" max="999" placeholder="000">
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+            </div>
+
+            <button type="button" class="add-more-btn" onclick="addSystemicMedication()">+ Add Another Medication</button>
+        </div>
+
+        <!-- FORM BUTTONS -->
+        <div style="display: flex; gap: 10px; justify-content: flex-end; margin-top: 30px;">
+            <a href="{{ url_for('validate_data') }}" class="btn btn-secondary">Cancel</a>
+            <button type="submit" class="btn btn-success">💾 Save Changes</button>
+        </div>
+    </form>
+</div>
+<script>
+// Conditional field handlers
+function handleLensStatus(value) {
+    document.getElementById('locs_fields').classList.toggle('active', value === 'Phakic');
+    document.getElementById('iol_fields').classList.toggle('active', value === 'Pseudophakic');
+    document.getElementById('aphakia_fields').classList.toggle('active', value === 'Aphakic');
+}
+
+function handleGlaucoma(value) {
+    document.getElementById('oht_pac_fields').classList.toggle('active', value === '0');
+    document.getElementById('glaucoma_etiology_fields').classList.toggle('active', value === '1');
+}
+
+function handleDR(value) {
+    document.getElementById('dr_stage_fields').classList.toggle('active', value === '1');
+}
+
+function handleDRStage(value) {
+    document.getElementById('npdr_stage_fields').classList.toggle('active', value === 'NPDR');
+    document.getElementById('pdr_stage_fields').classList.toggle('active', value === 'PDR');
+}
+
+function handleME(value) {
+    document.getElementById('me_etiology_fields').classList.toggle('active', value === '1');
+}
+
+function handleMD(value) {
+    document.getElementById('md_etiology_fields').classList.toggle('active', value === '1');
+}
+
+function handleMDEtiology(value) {
+    document.getElementById('amd_stage_fields').classList.toggle('active', value === 'AMD');
+    document.getElementById('other_md_stage_fields').classList.toggle('active', value === 'Other' || value === 'ND');
+}
+
+function handleAMDStage(value) {
+    const showExudation = ['nAMD', 'nAMD+GA', 'ND'].includes(value);
+    document.getElementById('amd_exudation_fields').classList.toggle('active', showExudation);
+}
+
+function handleOtherMDStage(value) {
+    document.getElementById('other_md_exudation_fields').classList.toggle('active', value !== 'ND');
+}
+
+function handleMHVMT(value) {
+    document.getElementById('mh_vmt_fields').classList.toggle('active', value === '1');
+}
+
+function handleMHVMTEtiology(value) {
+    document.getElementById('secondary_mh_vmt_fields').classList.toggle('active', value === 'Secondary');
+}
+
+function handleERM(value) {
+    document.getElementById('erm_fields').classList.toggle('active', value === '1');
+}
+
+function handleERMEtiology(value) {
+    document.getElementById('secondary_erm_fields').classList.toggle('active', value === 'Secondary');
+}
+
+function handleRD(value) {
+    const showFields = value !== '0' && value !== 'ND';
+    document.getElementById('rd_fields').classList.toggle('active', showFields);
+}
+
+function handleVO(value) {
+    document.getElementById('vh_etiology_fields').classList.toggle('active', value === 'Vitreous haemorrhage');
+}
+
+// Add more repeatable items
+function addOtherOcularCondition() {
+    const container = document.getElementById('other_ocular_conditions_container');
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+    container.appendChild(item);
+}
+
+function addPreviousSurgery() {
+    const container = document.getElementById('previous_surgeries_container');
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+    container.appendChild(item);
+}
+
+function addSystemicCondition() {
+    const container = document.getElementById('systemic_conditions_container');
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+    container.appendChild(item);
+}
+
+function addOcularMedication() {
+    const container = document.getElementById('ocular_medications_container');
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+    item.querySelectorAll('input').forEach(input => input.value = '');
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+    container.appendChild(item);
+}
+
+function addSystemicMedication() {
+    const container = document.getElementById('systemic_medications_container');
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+    item.querySelectorAll('input').forEach(input => input.value = '');
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+    container.appendChild(item);
+}
+
+// Initialize conditional fields on page load
+document.addEventListener('DOMContentLoaded', function() {
+    // Initialize all conditional fields based on current values
+    const lensStatus = document.getElementById('lens_status');
+    if (lensStatus) handleLensStatus(lensStatus.value);
+
+    const glaucoma = document.getElementById('glaucoma');
+    if (glaucoma) handleGlaucoma(glaucoma.value);
+
+    const dr = document.getElementById('diabetic_retinopathy');
+    if (dr) handleDR(dr.value);
+
+    const drStageSelect = document.getElementById('dr_stage');
+    if (drStageSelect) handleDRStage(drStageSelect.value);
+
+    const me = document.getElementById('macular_edema');
+    if (me) handleME(me.value);
+
+    const md = document.getElementById('macular_degeneration');
+    if (md) handleMD(md.value);
+
+    const mdEtiologySelect = document.getElementById('md_etiology');
+    if (mdEtiologySelect) handleMDEtiology(mdEtiologySelect.value);
+
+    const amdStageSelect = document.getElementById('amd_stage');
+    if (amdStageSelect) handleAMDStage(amdStageSelect.value);
+
+    const otherMdStageSelect = document.getElementById('other_md_stage');
+    if (otherMdStageSelect) handleOtherMDStage(otherMdStageSelect.value);
+
+    const mhVmt = document.getElementById('mh_vmt');
+    if (mhVmt) handleMHVMT(mhVmt.value);
+
+    const mhVmtEtiologySelect = document.getElementById('mh_vmt_etiology');
+    if (mhVmtEtiologySelect) handleMHVMTEtiology(mhVmtEtiologySelect.value);
+
+    const erm = document.getElementById('epiretinal_membrane');
+    if (erm) handleERM(erm.value);
+
+    const ermEtiologySelect = document.getElementById('erm_etiology');
+    if (ermEtiologySelect) handleERMEtiology(ermEtiologySelect.value);
+
+    const rd = document.getElementById('retinal_detachment');
+    if (rd) handleRD(rd.value);
+
+    const vo = document.getElementById('vitreous_opacification');
+    if (vo) handleVO(vo.value);
+});
+
+// Form validation before submit
+document.getElementById('patientForm').addEventListener('submit', function(e) {
+    const mbo = document.getElementById('mbo').value;
+    if (!/^\d{9}$/.test(mbo)) {
+        e.preventDefault();
+        alert('MBO must be exactly 9 digits.');
+        return false;
+    }
+
+    const dobDay = document.querySelector('[name="dob_day"]').value;
+    const dobMonth = document.querySelector('[name="dob_month"]').value;
+    const dobYear = document.querySelector('[name="dob_year"]').value;
+    const colDay = document.querySelector('[name="collection_day"]').value;
+    const colMonth = document.querySelector('[name="collection_month"]').value;
+    const colYear = document.querySelector('[name="collection_year"]').value;
+
+    if (!dobDay || !dobMonth || !dobYear || !colDay || !colMonth || !colYear) {
+        e.preventDefault();
+        alert('Please fill in all date fields.');
+        return false;
+    }
+
+    const dob = new Date(dobYear, dobMonth - 1, dobDay);
+    const collection = new Date(colYear, colMonth - 1, colDay);
+
+    if (collection <= dob) {
+        e.preventDefault();
+        alert('Date of sample collection must be after date of birth.');
+        return false;
+    }
+
+    if (!confirm('Are you sure you want to save changes to this patient record?')) {
+        e.preventDefault();
+        return false;
+    }
+});
+</script>
+
+{% endblock %}

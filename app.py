@@ -551,23 +551,355 @@ def new_patient():
         return redirect(url_for('new_patient'))
 
 
-@app.route('/api/check-patient-id/<int:patient_id>')
-def check_patient_id(patient_id):
-    """API endpoint to check if patient ID is available"""
+@app.route('/validate-data', methods=['GET'])
+def validate_data():
+    """Search for patients to validate/edit"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if session.get('role') not in ['Administrator', 'Staff']:
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+
+    # Get search parameters
+    search_query = request.args.get('q', '')
+    search_type = request.args.get('type', 'id')
+
     conn = get_db_connection()
     if not conn:
-        return jsonify({'available': False, 'error': 'Database connection error'})
+        flash('Database connection error', 'error')
+        return render_template('validate_data.html', patients=[])
 
     try:
-        cur = conn.cursor()
-        cur.execute("SELECT 1 FROM patients_sensitive WHERE patient_id = %s", (patient_id,))
-        exists = cur.fetchone()
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+        patients = []
+
+        if search_query:
+            if search_type == 'id':
+                cur.execute("""
+                    SELECT ps.patient_id, ps.patient_name, ps.date_of_birth, 
+                           ps.date_of_sample_collection, pst.sex, pst.eye
+                    FROM patients_sensitive ps
+                    JOIN patients_statistical pst ON ps.patient_id = pst.patient_id
+                    WHERE ps.patient_id::text LIKE %s
+                    ORDER BY ps.patient_id
+                    LIMIT 50
+                """, (f'%{search_query}%',))
+            elif search_type == 'name':
+                cur.execute("""
+                    SELECT ps.patient_id, ps.patient_name, ps.date_of_birth, 
+                           ps.date_of_sample_collection, pst.sex, pst.eye
+                    FROM patients_sensitive ps
+                    JOIN patients_statistical pst ON ps.patient_id = pst.patient_id
+                    WHERE LOWER(ps.patient_name) LIKE LOWER(%s)
+                    ORDER BY ps.patient_name
+                    LIMIT 50
+                """, (f'%{search_query}%',))
+            elif search_type == 'mbo':
+                cur.execute("""
+                    SELECT ps.patient_id, ps.patient_name, ps.date_of_birth, 
+                           ps.date_of_sample_collection, pst.sex, pst.eye
+                    FROM patients_sensitive ps
+                    JOIN patients_statistical pst ON ps.patient_id = pst.patient_id
+                    WHERE ps.mbo LIKE %s
+                    ORDER BY ps.patient_id
+                    LIMIT 50
+                """, (f'%{search_query}%',))
+
+            patients = cur.fetchall()
+        else:
+            # Show recent patients if no search
+            cur.execute("""
+                SELECT ps.patient_id, ps.patient_name, ps.date_of_birth, 
+                       ps.date_of_sample_collection, pst.sex, pst.eye
+                FROM patients_sensitive ps
+                JOIN patients_statistical pst ON ps.patient_id = pst.patient_id
+                ORDER BY ps.created_at DESC
+                LIMIT 20
+            """)
+            patients = cur.fetchall()
+
         cur.close()
         conn.close()
 
-        return jsonify({'available': not bool(exists)})
+        return render_template('validate_data.html',
+                               patients=patients,
+                               search_query=search_query,
+                               search_type=search_type)
+
     except psycopg2.Error as e:
-        return jsonify({'available': False, 'error': str(e)})
+        print(f"Error searching patients: {e}")
+        flash('Error searching patients', 'error')
+        return render_template('validate_data.html', patients=[])
+    finally:
+        if conn:
+            conn.close()
+
+
+@app.route('/edit-patient/<int:patient_id>', methods=['GET', 'POST'])
+def edit_patient(patient_id):
+    """Edit existing patient data"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if session.get('role') not in ['Administrator', 'Staff']:
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+
+    conn = get_db_connection()
+    if not conn:
+        flash('Database connection error', 'error')
+        return redirect(url_for('validate_data'))
+
+    if request.method == 'GET':
+        # Load patient data
+        try:
+            cur = conn.cursor(cursor_factory=RealDictCursor)
+
+            # Get sensitive data
+            cur.execute("""
+                SELECT * FROM patients_sensitive WHERE patient_id = %s
+            """, (patient_id,))
+            patient = cur.fetchone()
+
+            if not patient:
+                flash('Patient not found', 'error')
+                return redirect(url_for('validate_data'))
+
+            # Get statistical data
+            cur.execute("""
+                SELECT * FROM patients_statistical WHERE patient_id = %s
+            """, (patient_id,))
+            stats = cur.fetchone()
+
+            # Get ocular conditions
+            cur.execute("""
+                SELECT * FROM ocular_conditions WHERE patient_id = %s
+            """, (patient_id,))
+            conditions = cur.fetchone()
+
+            # Get other ocular conditions
+            cur.execute("""
+                SELECT * FROM other_ocular_conditions WHERE patient_id = %s
+                ORDER BY id
+            """, (patient_id,))
+            other_conditions = cur.fetchall()
+
+            # Get previous surgeries
+            cur.execute("""
+                SELECT * FROM previous_ocular_surgeries WHERE patient_id = %s
+                ORDER BY id
+            """, (patient_id,))
+            surgeries = cur.fetchall()
+
+            # Get systemic conditions
+            cur.execute("""
+                SELECT * FROM systemic_conditions WHERE patient_id = %s
+                ORDER BY id
+            """, (patient_id,))
+            systemic = cur.fetchall()
+
+            # Get ocular medications
+            cur.execute("""
+                SELECT * FROM ocular_medications WHERE patient_id = %s
+                ORDER BY id
+            """, (patient_id,))
+            ocular_meds = cur.fetchall()
+
+            # Get systemic medications
+            cur.execute("""
+                SELECT * FROM systemic_medications WHERE patient_id = %s
+                ORDER BY id
+            """, (patient_id,))
+            systemic_meds = cur.fetchall()
+
+            cur.close()
+            conn.close()
+
+            return render_template('edit_patient.html',
+                                   patient=patient,
+                                   stats=stats,
+                                   conditions=conditions,
+                                   other_conditions=other_conditions,
+                                   surgeries=surgeries,
+                                   systemic=systemic,
+                                   ocular_meds=ocular_meds,
+                                   systemic_meds=systemic_meds)
+
+        except psycopg2.Error as e:
+            print(f"Error loading patient: {e}")
+            flash('Error loading patient data', 'error')
+            return redirect(url_for('validate_data'))
+
+    # Handle POST - update patient
+    try:
+        cur = conn.cursor()
+
+        # Extract form data (same as new patient)
+        patient_name = request.form.get('patient_name')
+        mbo = request.form.get('mbo')
+        sex = request.form.get('sex')
+        eye = request.form.get('eye')
+
+        # Build dates
+        dob_day = int(request.form.get('dob_day'))
+        dob_month = int(request.form.get('dob_month'))
+        dob_year = int(request.form.get('dob_year'))
+        date_of_birth = date(dob_year, dob_month, dob_day)
+
+        col_day = int(request.form.get('collection_day'))
+        col_month = int(request.form.get('collection_month'))
+        col_year = int(request.form.get('collection_year'))
+        date_of_collection = date(col_year, col_month, col_day)
+
+        # Update patients_sensitive
+        cur.execute("""
+            UPDATE patients_sensitive 
+            SET patient_name = %s, mbo = %s, date_of_birth = %s, date_of_sample_collection = %s
+            WHERE patient_id = %s
+        """, (patient_name, mbo, date_of_birth, date_of_collection, patient_id))
+
+        # Update patients_statistical
+        person_hash = generate_person_hash(mbo)
+        age = calculate_age(date_of_birth, date_of_collection)
+
+        cur.execute("""
+            UPDATE patients_statistical 
+            SET person_hash = %s, age = %s, sex = %s, eye = %s
+            WHERE patient_id = %s
+        """, (person_hash, age, sex, eye, patient_id))
+
+        # Update ocular conditions
+        cur.execute("""
+            UPDATE ocular_conditions SET
+                lens_status = %s, locs_iii_no = %s, locs_iii_nc = %s, locs_iii_c = %s, locs_iii_p = %s,
+                iol_type = %s, aphakia_etiology = %s, glaucoma = %s, oht_or_pac = %s, glaucoma_etiology = %s,
+                steroid_responder = %s, pxs = %s, pds = %s, diabetic_retinopathy = %s, dr_stage = %s,
+                npdr_stage = %s, pdr_stage = %s, macular_edema = %s, me_etiology = %s, 
+                macular_degeneration = %s, md_etiology = %s, amd_stage = %s, amd_exudation = %s,
+                other_md_stage = %s, other_md_exudation = %s, mh_vmt = %s, mh_vmt_etiology = %s,
+                secondary_mh_vmt_cause = %s, mh_vmt_treatment_status = %s, epiretinal_membrane = %s,
+                erm_etiology = %s, secondary_erm_cause = %s, erm_treatment_status = %s,
+                retinal_detachment = %s, rd_etiology = %s, rd_treatment_status = %s, pvr = %s,
+                vitreous_opacification = %s, vh_etiology = %s
+            WHERE patient_id = %s
+        """, (
+            request.form.get('lens_status', 'ND'),
+            request.form.get('locs_no', 'ND'),
+            request.form.get('locs_nc', 'ND'),
+            request.form.get('locs_c', 'ND'),
+            request.form.get('locs_p', 'ND'),
+            request.form.get('iol_type', 'ND'),
+            request.form.get('aphakia_etiology', 'ND'),
+            request.form.get('glaucoma', '0'),
+            request.form.get('oht_or_pac', '0'),
+            request.form.get('glaucoma_etiology', 'ND'),
+            request.form.get('steroid_responder', '0'),
+            request.form.get('pxs', '0'),
+            request.form.get('pds', '0'),
+            request.form.get('diabetic_retinopathy', '0'),
+            request.form.get('dr_stage', 'ND'),
+            request.form.get('npdr_stage', 'ND'),
+            request.form.get('pdr_stage', 'ND'),
+            request.form.get('macular_edema', '0'),
+            request.form.get('me_etiology', 'ND'),
+            request.form.get('macular_degeneration', '0'),
+            request.form.get('md_etiology', 'ND'),
+            request.form.get('amd_stage', 'ND'),
+            request.form.get('amd_exudation', '0'),
+            request.form.get('other_md_stage', 'ND'),
+            request.form.get('other_md_exudation', '0'),
+            request.form.get('mh_vmt', '0'),
+            request.form.get('mh_vmt_etiology', 'ND'),
+            request.form.get('secondary_mh_vmt_cause', 'ND'),
+            request.form.get('mh_vmt_treatment_status', 'ND'),
+            request.form.get('epiretinal_membrane', '0'),
+            request.form.get('erm_etiology', 'ND'),
+            request.form.get('secondary_erm_cause', 'ND'),
+            request.form.get('erm_treatment_status', 'ND'),
+            request.form.get('retinal_detachment', '0'),
+            request.form.get('rd_etiology', 'ND'),
+            request.form.get('rd_treatment_status', 'ND'),
+            request.form.get('pvr', '0'),
+            request.form.get('vitreous_opacification', '0'),
+            request.form.get('vh_etiology', 'ND'),
+            patient_id
+        ))
+
+        # Delete and re-insert repeatable items
+        cur.execute("DELETE FROM other_ocular_conditions WHERE patient_id = %s", (patient_id,))
+        cur.execute("DELETE FROM previous_ocular_surgeries WHERE patient_id = %s", (patient_id,))
+        cur.execute("DELETE FROM systemic_conditions WHERE patient_id = %s", (patient_id,))
+        cur.execute("DELETE FROM ocular_medications WHERE patient_id = %s", (patient_id,))
+        cur.execute("DELETE FROM systemic_medications WHERE patient_id = %s", (patient_id,))
+
+        # Re-insert other ocular conditions
+        other_conditions = request.form.getlist('other_ocular_condition[]')
+        other_condition_eyes = request.form.getlist('other_ocular_condition_eye[]')
+        for i, condition in enumerate(other_conditions):
+            if condition and condition not in ['0', '']:
+                cur.execute("""
+                    INSERT INTO other_ocular_conditions (patient_id, icd10_code, eye)
+                    VALUES (%s, %s, %s)
+                """, (patient_id, condition, other_condition_eyes[i] if i < len(other_condition_eyes) else 'ND'))
+
+        # Re-insert previous surgeries
+        surgeries = request.form.getlist('previous_surgery[]')
+        surgery_eyes = request.form.getlist('previous_surgery_eye[]')
+        for i, surgery in enumerate(surgeries):
+            if surgery and surgery not in ['0', '']:
+                cur.execute("""
+                    INSERT INTO previous_ocular_surgeries (patient_id, surgery_code, eye)
+                    VALUES (%s, %s, %s)
+                """, (patient_id, surgery, surgery_eyes[i] if i < len(surgery_eyes) else 'ND'))
+
+        # Re-insert systemic conditions
+        systemic_conditions = request.form.getlist('systemic_condition[]')
+        for condition in systemic_conditions:
+            if condition and condition not in ['0', '']:
+                cur.execute("""
+                    INSERT INTO systemic_conditions (patient_id, icd10_code)
+                    VALUES (%s, %s)
+                """, (patient_id, condition))
+
+        # Re-insert ocular medications
+        ocular_meds = request.form.getlist('ocular_medication[]')
+        ocular_med_eyes = request.form.getlist('ocular_medication_eye[]')
+        ocular_med_days = request.form.getlist('ocular_medication_days[]')
+        for i, med in enumerate(ocular_meds):
+            if med and med not in ['0', '']:
+                days = ocular_med_days[i] if i < len(ocular_med_days) and ocular_med_days[i] else None
+                cur.execute("""
+                    INSERT INTO ocular_medications 
+                    (patient_id, trade_name, generic_name, eye, days_before_collection)
+                    VALUES (%s, %s, %s, %s, %s)
+                """, (patient_id, med, med, ocular_med_eyes[i] if i < len(ocular_med_eyes) else 'ND', days))
+
+        # Re-insert systemic medications
+        systemic_meds = request.form.getlist('systemic_medication[]')
+        systemic_med_days = request.form.getlist('systemic_medication_days[]')
+        for i, med in enumerate(systemic_meds):
+            if med and med not in ['0', '']:
+                days = systemic_med_days[i] if i < len(systemic_med_days) and systemic_med_days[i] else None
+                cur.execute("""
+                    INSERT INTO systemic_medications 
+                    (patient_id, trade_name, generic_name, days_before_collection)
+                    VALUES (%s, %s, %s, %s)
+                """, (patient_id, med, med, days))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        flash(f'Patient #{patient_id} ({patient_name}) successfully updated!', 'success')
+        return redirect(url_for('validate_data'))
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+        print(f"Error updating patient: {e}")
+        flash(f'Error updating patient: {str(e)}', 'error')
+        return redirect(url_for('edit_patient', patient_id=patient_id))
 
 
 if __name__ == '__main__':
