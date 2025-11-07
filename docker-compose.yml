@@ -3,13 +3,13 @@ services:
     image: postgres:15-alpine
     container_name: medical_postgres
     environment:
-      POSTGRES_DB: istrazivanje_medicina
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: ${DB_NAME:-raman_research_prod}
+      POSTGRES_USER: ${DB_USER:-postgres}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
     volumes:
       - postgres_data:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5434:5432"
     networks:
       - medical_network
     healthcheck:
@@ -17,19 +17,21 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   web:
     build: .
     container_name: medical_web
     environment:
-      DB_NAME: istrazivanje_medicina
-      DB_USER: postgres
-      DB_PASSWORD: postgres
-      DB_HOST: postgres
-      DB_PORT: 5432
-      SECRET_KEY: your-secret-key-change-in-production
+      DB_NAME: ${DB_NAME:-raman_research_prod}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST:-postgres}
+      DB_PORT: ${DB_PORT:-5432}
+      SECRET_KEY: ${SECRET_KEY}
+      FLASK_ENV: production
     ports:
-      - "5000:5000"
+      - "5001:5001"
     depends_on:
       postgres:
         condition: service_healthy
@@ -43,8 +45,8 @@ services:
     image: nginx:alpine
     container_name: medical_nginx
     ports:
-      - "80:80"
-      - "443:443"
+      - "8088:80"
+      # - "443:443"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
