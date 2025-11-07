@@ -346,7 +346,326 @@ def dashboard():
     if 'user_id' not in session:
         return redirect(url_for('login'))
 
-    return render_template('dashboard.html')
+    # Get statistics for dashboard
+    conn = get_db_connection()
+    stats = {}
+    if conn:
+        try:
+            cur = conn.cursor()
+
+            # Total patients
+            cur.execute("SELECT COUNT(*) FROM patients_sensitive")
+            stats['total_patients'] = cur.fetchone()[0]
+
+            # Total users
+            cur.execute("SELECT COUNT(*) FROM users")
+            stats['total_users'] = cur.fetchone()[0]
+
+            # Next patient ID
+            cur.execute("SELECT last_value FROM patient_id_seq")
+            stats['next_patient_id'] = cur.fetchone()[0] + 1
+
+            cur.close()
+            conn.close()
+        except Exception as e:
+            print(f"Error getting dashboard stats: {e}")
+            if conn:
+                conn.close()
+
+    return render_template('dashboard.html', stats=stats)
+
+
+@app.route('/user-management')
+def user_management():
+    """User management page for administrators"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if session.get('role') != 'Administrator':
+        flash('Access denied. Administrator privileges required.', 'error')
+        return redirect(url_for('dashboard'))
+
+    conn = get_db_connection()
+    if not conn:
+        flash('Database connection error', 'error')
+        return render_template('user_management.html', users=[], stats={})
+
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Get all users
+        cur.execute("""
+            SELECT user_id, username, email, role, created_at, last_login
+            FROM users
+            ORDER BY user_id
+        """)
+        users = cur.fetchall()
+
+        # Get statistics
+        cur.execute("""
+            SELECT 
+                COUNT(*) as total_users,
+                SUM(CASE WHEN role = 'Administrator' THEN 1 ELSE 0 END) as administrators,
+                SUM(CASE WHEN role = 'Staff' THEN 1 ELSE 0 END) as staff,
+                SUM(CASE WHEN role = 'Patient' THEN 1 ELSE 0 END) as patients
+            FROM users
+        """)
+        stats = cur.fetchone()
+
+        cur.close()
+        conn.close()
+
+        return render_template('user_management.html', users=users, stats=stats)
+
+    except Exception as e:
+        print(f"Error loading users: {e}")
+        flash('Error loading user data', 'error')
+        if conn:
+            conn.close()
+        return render_template('user_management.html', users=[], stats={})
+
+
+@app.route('/create-user', methods=['POST'])
+def create_user():
+    """Create a new user"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if session.get('role') != 'Administrator':
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+
+    username = request.form.get('username')
+    password = request.form.get('password')
+    email = request.form.get('email', '')
+    role = request.form.get('role', 'Staff')
+
+    if not username or not password:
+        flash('Username and password are required', 'error')
+        return redirect(url_for('user_management'))
+
+    if len(password) < 6:
+        flash('Password must be at least 6 characters long', 'error')
+        return redirect(url_for('user_management'))
+
+    conn = get_db_connection()
+    if not conn:
+        flash('Database connection error', 'error')
+        return redirect(url_for('user_management'))
+
+    try:
+        cur = conn.cursor()
+
+        # Check if username already exists
+        cur.execute("SELECT user_id FROM users WHERE username = %s", (username,))
+        if cur.fetchone():
+            flash('Username already exists', 'error')
+            return redirect(url_for('user_management'))
+
+        # Hash password and create user
+        hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+        cur.execute("""
+            INSERT INTO users (username, password_hash, email, role, created_at)
+            VALUES (%s, %s, %s, %s, %s)
+        """, (username, hashed_password, email if email else None, role, datetime.now()))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        flash(f'User "{username}" created successfully', 'success')
+
+    except Exception as e:
+        print(f"Error creating user: {e}")
+        if conn:
+            conn.rollback()
+            conn.close()
+        flash('Error creating user', 'error')
+
+    return redirect(url_for('user_management'))
+
+
+@app.route('/update-user', methods=['POST'])
+def update_user():
+    """Update existing user"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if session.get('role') != 'Administrator':
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+
+    user_id = request.form.get('user_id')
+    username = request.form.get('username')
+    email = request.form.get('email', '')
+    role = request.form.get('role')
+    password = request.form.get('password')
+
+    if not user_id or not username or not role:
+        flash('Missing required fields', 'error')
+        return redirect(url_for('user_management'))
+
+    conn = get_db_connection()
+    if not conn:
+        flash('Database connection error', 'error')
+        return redirect(url_for('user_management'))
+
+    try:
+        cur = conn.cursor()
+
+        # Check if changing own role from Administrator
+        if int(user_id) == session['user_id'] and role != 'Administrator':
+            flash('You cannot remove your own administrator privileges', 'error')
+            return redirect(url_for('user_management'))
+
+        # Update basic info
+        cur.execute("""
+            UPDATE users 
+            SET username = %s, email = %s, role = %s
+            WHERE user_id = %s
+        """, (username, email if email else None, role, user_id))
+
+        # Update password if provided
+        if password and len(password) >= 6:
+            hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
+            cur.execute("""
+                UPDATE users 
+                SET password_hash = %s
+                WHERE user_id = %s
+            """, (hashed_password, user_id))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        flash(f'User "{username}" updated successfully', 'success')
+
+    except Exception as e:
+        print(f"Error updating user: {e}")
+        if conn:
+            conn.rollback()
+            conn.close()
+        flash('Error updating user', 'error')
+
+    return redirect(url_for('user_management'))
+
+
+@app.route('/reset-user-password', methods=['POST'])
+def reset_user_password():
+    """Reset user password to default"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if session.get('role') != 'Administrator':
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+
+    user_id = request.form.get('user_id')
+
+    if not user_id:
+        flash('User ID required', 'error')
+        return redirect(url_for('user_management'))
+
+    conn = get_db_connection()
+    if not conn:
+        flash('Database connection error', 'error')
+        return redirect(url_for('user_management'))
+
+    try:
+        cur = conn.cursor()
+
+        # Reset password to "password123"
+        default_password = 'password123'
+        hashed_password = bcrypt.generate_password_hash(default_password).decode('utf-8')
+
+        cur.execute("""
+            UPDATE users 
+            SET password_hash = %s
+            WHERE user_id = %s
+        """, (hashed_password, user_id))
+
+        # Get username for flash message
+        cur.execute("SELECT username FROM users WHERE user_id = %s", (user_id,))
+        username = cur.fetchone()[0]
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        flash(f'Password for "{username}" has been reset to: password123', 'success')
+
+    except Exception as e:
+        print(f"Error resetting password: {e}")
+        if conn:
+            conn.rollback()
+            conn.close()
+        flash('Error resetting password', 'error')
+
+    return redirect(url_for('user_management'))
+
+
+@app.route('/delete-user', methods=['POST'])
+def delete_user():
+    """Delete a user"""
+    if 'user_id' not in session:
+        return redirect(url_for('login'))
+
+    if session.get('role') != 'Administrator':
+        flash('Access denied', 'error')
+        return redirect(url_for('dashboard'))
+
+    user_id = request.form.get('user_id')
+
+    if not user_id:
+        flash('User ID required', 'error')
+        return redirect(url_for('user_management'))
+
+    # Prevent self-deletion
+    if int(user_id) == session['user_id']:
+        flash('You cannot delete your own account', 'error')
+        return redirect(url_for('user_management'))
+
+    conn = get_db_connection()
+    if not conn:
+        flash('Database connection error', 'error')
+        return redirect(url_for('user_management'))
+
+    try:
+        cur = conn.cursor()
+
+        # Get username for flash message
+        cur.execute("SELECT username FROM users WHERE user_id = %s", (user_id,))
+        result = cur.fetchone()
+        if not result:
+            flash('User not found', 'error')
+            return redirect(url_for('user_management'))
+
+        username = result[0]
+
+        # Check if user has created any patients
+        cur.execute("SELECT COUNT(*) FROM patients_sensitive WHERE created_by = %s", (user_id,))
+        patient_count = cur.fetchone()[0]
+
+        if patient_count > 0:
+            # Instead of deleting, you might want to deactivate or handle differently
+            flash(f'Cannot delete "{username}" - user has created {patient_count} patient records', 'error')
+        else:
+            # Delete the user
+            cur.execute("DELETE FROM users WHERE user_id = %s", (user_id,))
+            conn.commit()
+            flash(f'User "{username}" deleted successfully', 'success')
+
+        cur.close()
+        conn.close()
+
+    except Exception as e:
+        print(f"Error deleting user: {e}")
+        if conn:
+            conn.rollback()
+            conn.close()
+        flash('Error deleting user', 'error')
+
+    return redirect(url_for('user_management'))
 
 
 @app.route('/export-data', methods=['GET', 'POST'])

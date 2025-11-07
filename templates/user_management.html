@@ -1,0 +1,493 @@
+<!-- templates/user_management.html -->
+{% extends "base.html" %}
+
+{% block title %}User Management - Raman{% endblock %}
+
+{% block content %}
+<style>
+    .management-container {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .users-table {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+
+    .table-header {
+        padding: 20px 30px;
+        border-bottom: 2px solid #ecf0f1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #f8f9fa;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    table th {
+        background: #f8f9fa;
+        padding: 15px 20px;
+        text-align: left;
+        font-weight: 600;
+        color: #2c3e50;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 2px solid #ecf0f1;
+    }
+
+    table td {
+        padding: 15px 20px;
+        border-bottom: 1px solid #ecf0f1;
+        font-size: 14px;
+    }
+
+    table tr:hover {
+        background: #f8f9fa;
+    }
+
+    .user-role {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .role-administrator {
+        background: #e8f5e9;
+        color: #2e7d32;
+    }
+
+    .role-staff {
+        background: #e3f2fd;
+        color: #1565c0;
+    }
+
+    .role-patient {
+        background: #fff3e0;
+        color: #e65100;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+    }
+
+    .btn-small {
+        padding: 6px 12px;
+        font-size: 12px;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .btn-edit {
+        background: #3498db;
+        color: white;
+    }
+
+    .btn-edit:hover {
+        background: #2980b9;
+    }
+
+    .btn-delete {
+        background: #e74c3c;
+        color: white;
+    }
+
+    .btn-delete:hover {
+        background: #c0392b;
+    }
+
+    .btn-reset {
+        background: #f39c12;
+        color: white;
+    }
+
+    .btn-reset:hover {
+        background: #e67e22;
+    }
+
+    .btn-new-user {
+        background: #27ae60;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .btn-new-user:hover {
+        background: #229954;
+    }
+
+    .last-login {
+        color: #7f8c8d;
+        font-size: 13px;
+    }
+
+    .current-user {
+        background: #fff9c4;
+    }
+
+    /* Modal styles */
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+    }
+
+    .modal.active {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 500px;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #ecf0f1;
+    }
+
+    .modal-title {
+        font-size: 20px;
+        color: #2c3e50;
+        font-weight: 600;
+    }
+
+    .close-modal {
+        background: none;
+        border: none;
+        font-size: 24px;
+        color: #7f8c8d;
+        cursor: pointer;
+    }
+
+    .close-modal:hover {
+        color: #2c3e50;
+    }
+
+    .modal-form {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .modal-buttons {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid #ecf0f1;
+    }
+
+    .info-message {
+        background: #e8f4f8;
+        border-left: 4px solid #3498db;
+        padding: 12px 15px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+        font-size: 14px;
+        color: #2c3e50;
+    }
+
+    .warning-message {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 12px 15px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+        font-size: 14px;
+        color: #856404;
+    }
+
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 20px;
+        margin-bottom: 30px;
+    }
+
+    .stat-card {
+        background: white;
+        padding: 20px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        text-align: center;
+    }
+
+    .stat-number {
+        font-size: 32px;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 5px;
+    }
+
+    .stat-label {
+        color: #7f8c8d;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+    }
+</style>
+
+<div class="management-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <h2>User Management</h2>
+        <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
+    </div>
+
+    <!-- Statistics -->
+    <div class="stats-row">
+        <div class="stat-card">
+            <div class="stat-number">{{ stats.total_users|default(0) }}</div>
+            <div class="stat-label">Total Users</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ stats.administrators|default(0) }}</div>
+            <div class="stat-label">Administrators</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ stats.staff|default(0) }}</div>
+            <div class="stat-label">Staff Members</div>
+        </div>
+        <div class="stat-card">
+            <div class="stat-number">{{ stats.patients|default(0) }}</div>
+            <div class="stat-label">Patients</div>
+        </div>
+    </div>
+
+    <!-- Users Table -->
+    <div class="users-table">
+        <div class="table-header">
+            <h3 style="margin: 0;">System Users</h3>
+            <button onclick="openNewUserModal()" class="btn-new-user">+ Add New User</button>
+        </div>
+
+        {% if users %}
+        <table>
+            <thead>
+                <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Email</th>
+                    <th>Role</th>
+                    <th>Created</th>
+                    <th>Last Login</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for user in users %}
+                <tr {% if user.user_id == session.user_id %}class="current-user"{% endif %}>
+                    <td>#{{ user.user_id }}</td>
+                    <td>
+                        <strong>{{ user.username }}</strong>
+                        {% if user.user_id == session.user_id %}
+                        <span style="color: #27ae60; font-size: 12px; margin-left: 5px;">(You)</span>
+                        {% endif %}
+                    </td>
+                    <td>{{ user.email|default('—') }}</td>
+                    <td>
+                        <span class="user-role role-{{ user.role|lower }}">{{ user.role }}</span>
+                    </td>
+                    <td>{{ user.created_at.strftime('%d.%m.%Y') if user.created_at else '—' }}</td>
+                    <td class="last-login">
+                        {% if user.last_login %}
+                            {{ user.last_login.strftime('%d.%m.%Y %H:%M') }}
+                        {% else %}
+                            Never
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="action-buttons">
+                            <button onclick="editUser({{ user.user_id }}, '{{ user.username }}', '{{ user.email|default('') }}', '{{ user.role }}')"
+                                    class="btn-small btn-edit">Edit</button>
+                            <button onclick="resetPassword({{ user.user_id }}, '{{ user.username }}')"
+                                    class="btn-small btn-reset">Reset Password</button>
+                            {% if user.user_id != session.user_id %}
+                            <button onclick="deleteUser({{ user.user_id }}, '{{ user.username }}')"
+                                    class="btn-small btn-delete">Delete</button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div style="text-align: center; padding: 60px 20px; color: #7f8c8d;">
+            <p>No users found in the system.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- New User Modal -->
+<div id="newUserModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Add New User</h3>
+            <button class="close-modal" onclick="closeModal('newUserModal')">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('create_user') }}" class="modal-form">
+            <div class="form-group">
+                <label for="new_username">Username *</label>
+                <input type="text" id="new_username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="new_email">Email</label>
+                <input type="email" id="new_email" name="email">
+            </div>
+            <div class="form-group">
+                <label for="new_password">Password *</label>
+                <input type="password" id="new_password" name="password" required minlength="6">
+                <small style="color: #7f8c8d;">Minimum 6 characters</small>
+            </div>
+            <div class="form-group">
+                <label for="new_role">Role *</label>
+                <select id="new_role" name="role" required>
+                    <option value="Patient">Patient</option>
+                    <option value="Staff" selected>Staff</option>
+                    <option value="Administrator">Administrator</option>
+                </select>
+            </div>
+            <div class="modal-buttons">
+                <button type="button" onclick="closeModal('newUserModal')" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-success">Create User</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit User Modal -->
+<div id="editUserModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Edit User</h3>
+            <button class="close-modal" onclick="closeModal('editUserModal')">&times;</button>
+        </div>
+        <form method="POST" action="{{ url_for('update_user') }}" class="modal-form">
+            <input type="hidden" id="edit_user_id" name="user_id">
+            <div class="form-group">
+                <label for="edit_username">Username *</label>
+                <input type="text" id="edit_username" name="username" required>
+            </div>
+            <div class="form-group">
+                <label for="edit_email">Email</label>
+                <input type="email" id="edit_email" name="email">
+            </div>
+            <div class="form-group">
+                <label for="edit_role">Role *</label>
+                <select id="edit_role" name="role" required>
+                    <option value="Patient">Patient</option>
+                    <option value="Staff">Staff</option>
+                    <option value="Administrator">Administrator</option>
+                </select>
+            </div>
+            <div class="info-message">
+                Leave password fields empty to keep the current password.
+            </div>
+            <div class="form-group">
+                <label for="edit_password">New Password (Optional)</label>
+                <input type="password" id="edit_password" name="password" minlength="6">
+                <small style="color: #7f8c8d;">Minimum 6 characters</small>
+            </div>
+            <div class="modal-buttons">
+                <button type="button" onclick="closeModal('editUserModal')" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Update User</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function openNewUserModal() {
+    document.getElementById('newUserModal').classList.add('active');
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+function editUser(userId, username, email, role) {
+    document.getElementById('edit_user_id').value = userId;
+    document.getElementById('edit_username').value = username;
+    document.getElementById('edit_email').value = email;
+    document.getElementById('edit_role').value = role;
+    document.getElementById('editUserModal').classList.add('active');
+}
+
+function resetPassword(userId, username) {
+    if (confirm(`Reset password for user "${username}"?\n\nThe new password will be: password123`)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ url_for("reset_user_password") }}';
+
+        const userIdInput = document.createElement('input');
+        userIdInput.type = 'hidden';
+        userIdInput.name = 'user_id';
+        userIdInput.value = userId;
+
+        form.appendChild(userIdInput);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+function deleteUser(userId, username) {
+    if (confirm(`Are you sure you want to delete user "${username}"?\n\nThis action cannot be undone.`)) {
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = '{{ url_for("delete_user") }}';
+
+        const userIdInput = document.createElement('input');
+        userIdInput.type = 'hidden';
+        userIdInput.name = 'user_id';
+        userIdInput.value = userId;
+
+        form.appendChild(userIdInput);
+        document.body.appendChild(form);
+        form.submit();
+    }
+}
+
+// Close modal when clicking outside of it
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.classList.remove('active');
+    }
+}
+</script>
+
+{% endblock %}

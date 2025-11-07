@@ -26,9 +26,9 @@
         </a>
 
         {% if session.role == 'Administrator' %}
-        <a href="#" class="btn btn-secondary" style="padding: 40px 20px; font-size: 16px;">
-            <div style="font-size: 32px; margin-bottom: 10px;">📋</div>
-            Import Reference Lists
+        <a href="{{ url_for('user_management') }}" class="btn btn-secondary" style="padding: 40px 20px; font-size: 16px;">
+            <div style="font-size: 32px; margin-bottom: 10px;">👥</div>
+            User Management
         </a>
         {% endif %}
     </div>
@@ -39,15 +39,15 @@
     <h3 style="margin-bottom: 20px; color: #2c3e50;">System Information</h3>
     <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px;">
         <div style="padding: 20px; background: #ecf0f1; border-radius: 6px;">
-            <div style="font-size: 24px; font-weight: bold; color: #3498db;">0</div>
+            <div style="font-size: 24px; font-weight: bold; color: #3498db;">{{ stats.total_patients|default(0) }}</div>
             <div style="color: #7f8c8d; font-size: 14px;">Total Patients</div>
         </div>
         <div style="padding: 20px; background: #ecf0f1; border-radius: 6px;">
-            <div style="font-size: 24px; font-weight: bold; color: #27ae60;">0</div>
-            <div style="color: #7f8c8d; font-size: 14px;">Samples Collected</div>
+            <div style="font-size: 24px; font-weight: bold; color: #27ae60;">{{ stats.total_users|default(0) }}</div>
+            <div style="color: #7f8c8d; font-size: 14px;">System Users</div>
         </div>
         <div style="padding: 20px; background: #ecf0f1; border-radius: 6px;">
-            <div style="font-size: 24px; font-weight: bold; color: #e74c3c;">1500</div>
+            <div style="font-size: 24px; font-weight: bold; color: #e74c3c;">{{ stats.next_patient_id|default(1500) }}</div>
             <div style="color: #7f8c8d; font-size: 14px;">Next Patient ID</div>
         </div>
     </div>
