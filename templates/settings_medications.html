@@ -1,0 +1,294 @@
+<!-- templates/settings_medications.html -->
+{% extends "base.html" %}
+
+{% block title %}Medications - Settings{% endblock %}
+
+{% block content %}
+<style>
+    /* Reuse styles from settings_icd10_ocular.html */
+    .management-container { max-width: 1400px; margin: 0 auto; }
+    .data-table { background: white; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); overflow: hidden; }
+    .table-header { padding: 20px 30px; border-bottom: 2px solid #ecf0f1; display: flex; justify-content: space-between; align-items: center; background: #f8f9fa; }
+    .search-bar { display: flex; gap: 10px; margin-bottom: 20px; }
+    .search-input { flex: 1; padding: 10px 15px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; }
+    table { width: 100%; border-collapse: collapse; }
+    table th { background: #f8f9fa; padding: 15px 20px; text-align: left; font-weight: 600; color: #2c3e50; font-size: 13px; text-transform: uppercase; letter-spacing: 0.5px; border-bottom: 2px solid #ecf0f1; }
+    table td { padding: 15px 20px; border-bottom: 1px solid #ecf0f1; font-size: 14px; }
+    table tr:hover { background: #f8f9fa; }
+    .status-badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; }
+    .status-active { background: #d4edda; color: #155724; }
+    .status-inactive { background: #f8d7da; color: #721c24; }
+    .type-badge { display: inline-block; padding: 4px 10px; border-radius: 4px; font-size: 12px; font-weight: 600; background: #e3f2fd; color: #1565c0; }
+    .action-buttons { display: flex; gap: 8px; }
+    .btn-small { padding: 6px 12px; font-size: 12px; border-radius: 4px; border: none; cursor: pointer; transition: all 0.3s; }
+    .btn-edit { background: #3498db; color: white; }
+    .btn-edit:hover { background: #2980b9; }
+    .btn-deactivate { background: #e74c3c; color: white; }
+    .btn-deactivate:hover { background: #c0392b; }
+    .btn-activate { background: #27ae60; color: white; }
+    .btn-activate:hover { background: #229954; }
+    .btn-add-new { background: #27ae60; color: white; padding: 10px 20px; border: none; border-radius: 6px; cursor: pointer; font-size: 14px; font-weight: 500; }
+    .btn-add-new:hover { background: #229954; }
+    .modal { display: none; position: fixed; z-index: 1000; left: 0; top: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.5); }
+    .modal.active { display: flex; align-items: center; justify-content: center; }
+    .modal-content { background: white; padding: 30px; border-radius: 8px; width: 90%; max-width: 600px; max-height: 80vh; overflow-y: auto; }
+    .modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; padding-bottom: 15px; border-bottom: 2px solid #ecf0f1; }
+    .modal-title { font-size: 20px; color: #2c3e50; font-weight: 600; }
+    .close-modal { background: none; border: none; font-size: 24px; color: #7f8c8d; cursor: pointer; }
+    .close-modal:hover { color: #2c3e50; }
+    .modal-form { display: flex; flex-direction: column; gap: 15px; }
+    .modal-buttons { display: flex; gap: 10px; justify-content: flex-end; margin-top: 20px; padding-top: 20px; border-top: 1px solid #ecf0f1; }
+</style>
+
+<div class="management-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <h2>Manage Medications</h2>
+        <div style="display: flex; gap: 10px;">
+            <a href="{{ url_for('settings') }}" class="btn btn-secondary">Back to Settings</a>
+        </div>
+    </div>
+
+    <div class="search-bar">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search by trade name or generic name..." onkeyup="filterTable()">
+    </div>
+
+    <div class="data-table">
+        <div class="table-header">
+            <h3 style="margin: 0;">Medications ({{ medications|length }} total)</h3>
+            <button onclick="openNewModal()" class="btn-add-new">+ Add New Medication</button>
+        </div>
+
+        {% if medications %}
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th>Trade Name</th>
+                    <th>Generic Name</th>
+                    <th>Type</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for med in medications %}
+                <tr>
+                    <td><strong>{{ med.trade_name }}</strong></td>
+                    <td>{{ med.generic_name }}</td>
+                    <td><span class="type-badge">{{ med.medication_type }}</span></td>
+                    <td>
+                        {% if med.active %}
+                        <span class="status-badge status-active">Active</span>
+                        {% else %}
+                        <span class="status-badge status-inactive">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="action-buttons">
+                            <button onclick='editMed({{ med|tojson }})' class="btn-small btn-edit">Edit</button>
+                            {% if med.active %}
+                            <button onclick="toggleStatus({{ med.id }}, false)" class="btn-small btn-deactivate">Deactivate</button>
+                            {% else %}
+                            <button onclick="toggleStatus({{ med.id }}, true)" class="btn-small btn-activate">Activate</button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div style="text-align: center; padding: 60px 20px; color: #7f8c8d;">
+            <p>No medications found.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- New Medication Modal -->
+<div id="newModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Add New Medication</h3>
+            <button class="close-modal" onclick="closeModal('newModal')">&times;</button>
+        </div>
+        <form id="newForm" class="modal-form" onsubmit="createMed(event)">
+            <div class="form-group">
+                <label for="new_trade_name">Trade Name *</label>
+                <input type="text" id="new_trade_name" name="trade_name" required>
+            </div>
+            <div class="form-group">
+                <label for="new_generic_name">Generic Name *</label>
+                <input type="text" id="new_generic_name" name="generic_name" required>
+            </div>
+            <div class="form-group">
+                <label for="new_medication_type">Medication Type *</label>
+                <select id="new_medication_type" name="medication_type" required>
+                    <option value="Ocular">Ocular</option>
+                    <option value="Systemic">Systemic</option>
+                    <option value="Both" selected>Both</option>
+                </select>
+            </div>
+            <div class="modal-buttons">
+                <button type="button" onclick="closeModal('newModal')" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-success">Create Medication</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Medication Modal -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Edit Medication</h3>
+            <button class="close-modal" onclick="closeModal('editModal')">&times;</button>
+        </div>
+        <form id="editForm" class="modal-form" onsubmit="updateMed(event)">
+            <input type="hidden" id="edit_id" name="id">
+            <div class="form-group">
+                <label for="edit_trade_name">Trade Name *</label>
+                <input type="text" id="edit_trade_name" name="trade_name" required>
+            </div>
+            <div class="form-group">
+                <label for="edit_generic_name">Generic Name *</label>
+                <input type="text" id="edit_generic_name" name="generic_name" required>
+            </div>
+            <div class="form-group">
+                <label for="edit_medication_type">Medication Type *</label>
+                <select id="edit_medication_type" name="medication_type" required>
+                    <option value="Ocular">Ocular</option>
+                    <option value="Systemic">Systemic</option>
+                    <option value="Both">Both</option>
+                </select>
+            </div>
+            <div class="modal-buttons">
+                <button type="button" onclick="closeModal('editModal')" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Update Medication</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function filterTable() {
+    const input = document.getElementById('searchInput');
+    const filter = input.value.toUpperCase();
+    const table = document.getElementById('dataTable');
+    const tr = table.getElementsByTagName('tr');
+    for (let i = 1; i < tr.length; i++) {
+        const td1 = tr[i].getElementsByTagName('td')[0];
+        const td2 = tr[i].getElementsByTagName('td')[1];
+        if (td1 || td2) {
+            const txt1 = td1.textContent || td1.innerText;
+            const txt2 = td2.textContent || td2.innerText;
+            if (txt1.toUpperCase().indexOf(filter) > -1 || txt2.toUpperCase().indexOf(filter) > -1) {
+                tr[i].style.display = '';
+            } else {
+                tr[i].style.display = 'none';
+            }
+        }
+    }
+}
+
+function openNewModal() {
+    document.getElementById('newForm').reset();
+    document.getElementById('newModal').classList.add('active');
+}
+
+function editMed(med) {
+    document.getElementById('edit_id').value = med.id;
+    document.getElementById('edit_trade_name').value = med.trade_name;
+    document.getElementById('edit_generic_name').value = med.generic_name;
+    document.getElementById('edit_medication_type').value = med.medication_type;
+    document.getElementById('editModal').classList.add('active');
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+async function createMed(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const data = {
+        trade_name: formData.get('trade_name'),
+        generic_name: formData.get('generic_name'),
+        medication_type: formData.get('medication_type'),
+        active: true
+    };
+    try {
+        const response = await fetch('/api/medications', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        if (response.ok) {
+            alert('Medication created successfully!');
+            window.location.reload();
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error creating medication: ' + error.message);
+    }
+}
+
+async function updateMed(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const data = {
+        id: parseInt(formData.get('id')),
+        trade_name: formData.get('trade_name'),
+        generic_name: formData.get('generic_name'),
+        medication_type: formData.get('medication_type'),
+        active: true
+    };
+    try {
+        const response = await fetch('/api/medications', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+        if (response.ok) {
+            alert('Medication updated successfully!');
+            window.location.reload();
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error updating medication: ' + error.message);
+    }
+}
+
+async function toggleStatus(id, newStatus) {
+    if (!confirm(`Are you sure you want to ${newStatus ? 'activate' : 'deactivate'} this medication?`)) {
+        return;
+    }
+    try {
+        const response = await fetch('/api/medications', {
+            method: newStatus ? 'PUT' : 'DELETE',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ id: id, active: newStatus })
+        });
+        if (response.ok) {
+            alert(`Medication ${newStatus ? 'activated' : 'deactivated'} successfully!`);
+            window.location.reload();
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error changing status: ' + error.message);
+    }
+}
+
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.classList.remove('active');
+    }
+}
+</script>
+
+{% endblock %}

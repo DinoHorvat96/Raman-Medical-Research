@@ -109,12 +109,107 @@
         font-size: 13px;
     }
 
-    .id-check {
-        display: none;
-        margin-top: 5px;
+    /* Patient ID Status Indicator */
+    .patient-id-status {
+        display: inline-block;
+        margin-left: 10px;
         font-size: 13px;
+        font-weight: 500;
+    }
+
+    .patient-id-status.checking {
+        color: #95a5a6;
+    }
+
+    .patient-id-status.available {
+        color: #27ae60;
+    }
+
+    .patient-id-status.unavailable {
+        color: #e74c3c;
+    }
+
+    /* Notification System */
+    .notification {
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        background: white;
+        padding: 15px 20px;
+        border-radius: 8px;
+        box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        border-left: 4px solid #3498db;
+        min-width: 300px;
+        max-width: 400px;
+        z-index: 9999;
+        animation: slideIn 0.3s ease;
+    }
+
+    .notification.warning {
+        border-left-color: #f39c12;
+        background: #fff9e6;
+    }
+
+    .notification.error {
+        border-left-color: #e74c3c;
+        background: #ffe6e6;
+    }
+
+    .notification.success {
+        border-left-color: #27ae60;
+        background: #e6f7ee;
+    }
+
+    .notification .notification-title {
+        font-weight: 600;
+        margin-bottom: 5px;
+        color: #2c3e50;
+    }
+
+    .notification .notification-message {
+        font-size: 13px;
+        color: #555;
+    }
+
+    .notification .notification-close {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        cursor: pointer;
+        color: #95a5a6;
+        font-size: 18px;
+        line-height: 1;
+    }
+
+    .notification .notification-close:hover {
+        color: #2c3e50;
+    }
+
+    @keyframes slideIn {
+        from {
+            transform: translateX(400px);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+
+    @keyframes slideOut {
+        from {
+            transform: translateX(0);
+            opacity: 1;
+        }
+        to {
+            transform: translateX(400px);
+            opacity: 0;
+        }
     }
 </style>
+
+<!-- Notification Container -->
+<div id="notification-container"></div>
 
 <div class="card">
     <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
@@ -122,7 +217,11 @@
         <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
     </div>
 
-    <form method="POST" id="patientForm">
+    <div class="info-box">
+        <p><strong>Patient ID:</strong> The next available ID has been automatically assigned. You can change it if needed. The system will check availability in real-time.</p>
+    </div>
+
+    <form method="POST" action="{{ url_for('new_patient') }}" id="patientForm">
 
         <!-- ========== GENERAL DATA ========== -->
         <div class="section-divider">
@@ -131,11 +230,15 @@
             <div class="form-row">
                 <div class="form-group">
                     <label for="patient_id">Patient ID *</label>
-                    <input type="number" id="patient_id" name="patient_id"
+                    <input type="number"
+                           id="patient_id"
+                           name="patient_id"
                            value="{{ next_patient_id }}"
-                           min="1" max="99999" required
-                           onchange="checkPatientId(this.value)">
-                    <small id="id-status" class="id-check"></small>
+                           min="1"
+                           max="99999"
+                           required>
+                    <span id="id-status" class="patient-id-status"></span>
+                    <small style="display:block; color: #7f8c8d; margin-top: 5px;">5 digits (00001-99999). Auto-assigned with real-time availability checking.</small>
                 </div>
             </div>
 
@@ -151,7 +254,6 @@
                     <input type="text" id="mbo" name="mbo" required
                            pattern="[0-9]{9}" maxlength="9"
                            placeholder="123456789">
-                    <small class="form-help">Used to generate anonymous person hash</small>
                 </div>
 
                 <div class="form-group">
@@ -737,38 +839,9 @@
                             <select name="other_ocular_condition[]">
                                 <option value="0" selected>0</option>
                                 <option value="ND">ND</option>
-                                <option value="H00">H00 - Hordeolum and chalazion</option>
-                                <option value="H01">H01 - Other inflammation of eyelid</option>
-                                <option value="H02">H02 - Other disorders of eyelid</option>
-                                <option value="H04">H04 - Disorders of lacrimal system</option>
-                                <option value="H05">H05 - Disorders of orbit</option>
-                                <option value="H10">H10 - Conjunctivitis</option>
-                                <option value="H11">H11 - Other disorders of conjunctiva</option>
-                                <option value="H15">H15 - Disorders of sclera</option>
-                                <option value="H16">H16 - Keratitis</option>
-                                <option value="H17">H17 - Corneal scars and opacities</option>
-                                <option value="H18">H18 - Other disorders of cornea</option>
-                                <option value="H20">H20 - Iridocyclitis</option>
-                                <option value="H21">H21 - Other disorders of iris and ciliary body</option>
-                                <option value="H25">H25 - Senile cataract</option>
-                                <option value="H26">H26 - Other cataract</option>
-                                <option value="H27">H27 - Other disorders of lens</option>
-                                <option value="H30">H30 - Chorioretinal inflammation</option>
-                                <option value="H31">H31 - Other disorders of choroid</option>
-                                <option value="H33">H33 - Retinal detachments and breaks</option>
-                                <option value="H34">H34 - Retinal vascular occlusions</option>
-                                <option value="H35">H35 - Other retinal disorders</option>
-                                <option value="H36">H36 - Retinal disorders in diseases classified elsewhere</option>
-                                <option value="H40">H40 - Glaucoma</option>
-                                <option value="H43">H43 - Disorders of vitreous body</option>
-                                <option value="H44">H44 - Disorders of globe</option>
-                                <option value="H46">H46 - Optic neuritis</option>
-                                <option value="H47">H47 - Other disorders of optic nerve and visual pathways</option>
-                                <option value="H49">H49 - Paralytic strabismus</option>
-                                <option value="H50">H50 - Other strabismus</option>
-                                <option value="H52">H52 - Disorders of refraction and accommodation</option>
-                                <option value="H53">H53 - Visual disturbances</option>
-                                <option value="H54">H54 - Blindness and low vision</option>
+                                {% for code in icd10_ocular %}
+                                <option value="{{ code.code }}">{{ code.code }} - {{ code.description }}</option>
+                                {% endfor %}
                             </select>
                         </div>
 
@@ -800,26 +873,9 @@
                             <select name="previous_surgery[]">
                                 <option value="0" selected>0</option>
                                 <option value="ND">ND</option>
-                                <option value="PPV">PPV (Pars plana vitrectomy)</option>
-                                <option value="Cataract surgery">Cataract surgery (phacoemulsification)</option>
-                                <option value="ECCE">ECCE (Extracapsular cataract extraction)</option>
-                                <option value="ICCE">ICCE (Intracapsular cataract extraction)</option>
-                                <option value="Trabeculectomy">Trabeculectomy</option>
-                                <option value="Tube shunt">Tube shunt surgery</option>
-                                <option value="SLT">SLT (Selective laser trabeculoplasty)</option>
-                                <option value="ALT">ALT (Argon laser trabeculoplasty)</option>
-                                <option value="LPI">LPI (Laser peripheral iridotomy)</option>
-                                <option value="PRP">PRP (Panretinal photocoagulation)</option>
-                                <option value="Focal laser">Focal laser photocoagulation</option>
-                                <option value="Anti-VEGF injection">Anti-VEGF intravitreal injection</option>
-                                <option value="Steroid injection">Steroid intravitreal injection</option>
-                                <option value="Scleral buckle">Scleral buckle</option>
-                                <option value="Pneumatic retinopexy">Pneumatic retinopexy</option>
-                                <option value="Corneal transplant">Corneal transplant (keratoplasty)</option>
-                                <option value="Refractive surgery">Refractive surgery (LASIK, PRK, etc.)</option>
-                                <option value="YAG capsulotomy">YAG laser capsulotomy</option>
-                                <option value="Enucleation">Enucleation</option>
-                                <option value="Evisceration">Evisceration</option>
+                                {% for surgery in surgeries %}
+                                <option value="{{ surgery.code }}">{{ surgery.code }} - {{ surgery.description }}</option>
+                                {% endfor %}
                             </select>
                         </div>
 
@@ -850,35 +906,9 @@
                         <select name="systemic_condition[]">
                             <option value="0" selected>0</option>
                             <option value="ND">ND</option>
-                            <option value="E10">E10 - Type 1 diabetes mellitus</option>
-                            <option value="E11">E11 - Type 2 diabetes mellitus</option>
-                            <option value="I10">I10 - Essential (primary) hypertension</option>
-                            <option value="I11">I11 - Hypertensive heart disease</option>
-                            <option value="I20">I20 - Angina pectoris</option>
-                            <option value="I21">I21 - Acute myocardial infarction</option>
-                            <option value="I25">I25 - Chronic ischaemic heart disease</option>
-                            <option value="I50">I50 - Heart failure</option>
-                            <option value="I63">I63 - Cerebral infarction</option>
-                            <option value="I64">I64 - Stroke, not specified</option>
-                            <option value="J44">J44 - Chronic obstructive pulmonary disease</option>
-                            <option value="J45">J45 - Asthma</option>
-                            <option value="N18">N18 - Chronic kidney disease</option>
-                            <option value="M05">M05 - Rheumatoid arthritis</option>
-                            <option value="M06">M06 - Other rheumatoid arthritis</option>
-                            <option value="M32">M32 - Systemic lupus erythematosus</option>
-                            <option value="C00-C97">C00-C97 - Malignant neoplasms</option>
-                            <option value="D50">D50 - Iron deficiency anaemia</option>
-                            <option value="E03">E03 - Other hypothyroidism</option>
-                            <option value="E05">E05 - Thyrotoxicosis</option>
-                            <option value="E66">E66 - Obesity</option>
-                            <option value="E78">E78 - Disorders of lipoprotein metabolism</option>
-                            <option value="F20">F20 - Schizophrenia</option>
-                            <option value="F31">F31 - Bipolar affective disorder</option>
-                            <option value="F32">F32 - Depressive episode</option>
-                            <option value="F41">F41 - Other anxiety disorders</option>
-                            <option value="G20">G20 - Parkinson's disease</option>
-                            <option value="G30">G30 - Alzheimer's disease</option>
-                            <option value="G35">G35 - Multiple sclerosis</option>
+                            {% for code in icd10_systemic %}
+                            <option value="{{ code.code }}">{{ code.code }} - {{ code.description }}</option>
+                            {% endfor %}
                         </select>
                     </div>
                 </div>
@@ -899,32 +929,13 @@
                             <select name="ocular_medication[]">
                                 <option value="0" selected>0</option>
                                 <option value="ND">ND</option>
-                                <option value="Latanoprost">Latanoprost</option>
-                                <option value="Travoprost">Travoprost</option>
-                                <option value="Bimatoprost">Bimatoprost</option>
-                                <option value="Tafluprost">Tafluprost</option>
-                                <option value="Timolol">Timolol</option>
-                                <option value="Betaxolol">Betaxolol</option>
-                                <option value="Dorzolamide">Dorzolamide</option>
-                                <option value="Brinzolamide">Brinzolamide</option>
-                                <option value="Brimonidine">Brimonidine</option>
-                                <option value="Apraclonidine">Apraclonidine</option>
-                                <option value="Pilocarpine">Pilocarpine</option>
-                                <option value="Prednisolone">Prednisolone (eye drops)</option>
-                                <option value="Dexamethasone">Dexamethasone (eye drops)</option>
-                                <option value="Fluorometholone">Fluorometholone</option>
-                                <option value="Nepafenac">Nepafenac</option>
-                                <option value="Ketorolac">Ketorolac</option>
-                                <option value="Diclofenac">Diclofenac (eye drops)</option>
-                                <option value="Cyclopentolate">Cyclopentolate</option>
-                                <option value="Tropicamide">Tropicamide</option>
-                                <option value="Atropine">Atropine (eye drops)</option>
-                                <option value="Ofloxacin">Ofloxacin</option>
-                                <option value="Moxifloxacin">Moxifloxacin</option>
-                                <option value="Tobramycin">Tobramycin</option>
-                                <option value="Gentamicin">Gentamicin (eye drops)</option>
-                                <option value="Artificial tears">Artificial tears</option>
-                                <option value="Hyaluronic acid">Hyaluronic acid (eye drops)</option>
+                                {% for med in medications %}
+                                {% if med.medication_type in ['Ocular', 'Both'] %}
+                                <option value="{{ med.trade_name }}|{{ med.generic_name }}">
+                                    {{ med.trade_name }} ({{ med.generic_name }})
+                                </option>
+                                {% endif %}
+                                {% endfor %}
                             </select>
                         </div>
 
@@ -961,33 +972,13 @@
                             <select name="systemic_medication[]">
                                 <option value="0" selected>0</option>
                                 <option value="ND">ND</option>
-                                <option value="Metformin">Metformin</option>
-                                <option value="Insulin">Insulin</option>
-                                <option value="Glimepiride">Glimepiride</option>
-                                <option value="Sitagliptin">Sitagliptin</option>
-                                <option value="Amlodipine">Amlodipine</option>
-                                <option value="Enalapril">Enalapril</option>
-                                <option value="Losartan">Losartan</option>
-                                <option value="Hydrochlorothiazide">Hydrochlorothiazide</option>
-                                <option value="Atorvastatin">Atorvastatin</option>
-                                <option value="Simvastatin">Simvastatin</option>
-                                <option value="Aspirin">Aspirin</option>
-                                <option value="Clopidogrel">Clopidogrel</option>
-                                <option value="Warfarin">Warfarin</option>
-                                <option value="Rivaroxaban">Rivaroxaban</option>
-                                <option value="Levothyroxine">Levothyroxine</option>
-                                <option value="Prednisolone">Prednisolone (oral)</option>
-                                <option value="Methotrexate">Methotrexate</option>
-                                <option value="Hydroxychloroquine">Hydroxychloroquine</option>
-                                <option value="Omeprazole">Omeprazole</option>
-                                <option value="Pantoprazole">Pantoprazole</option>
-                                <option value="Sertraline">Sertraline</option>
-                                <option value="Escitalopram">Escitalopram</option>
-                                <option value="Alprazolam">Alprazolam</option>
-                                <option value="Zolpidem">Zolpidem</option>
-                                <option value="Paracetamol">Paracetamol</option>
-                                <option value="Ibuprofen">Ibuprofen</option>
-                                <option value="Diclofenac">Diclofenac (oral)</option>
+                                {% for med in medications %}
+                                {% if med.medication_type in ['Systemic', 'Both'] %}
+                                <option value="{{ med.trade_name }}|{{ med.generic_name }}">
+                                    {{ med.trade_name }} ({{ med.generic_name }})
+                                </option>
+                                {% endif %}
+                                {% endfor %}
                             </select>
                         </div>
 
@@ -1010,208 +1001,554 @@
     </form>
 </div>
 
-<script>
-// Patient ID checking
-let checkTimeout;
-function checkPatientId(id) {
-    clearTimeout(checkTimeout);
-    const statusEl = document.getElementById('id-status');
-    statusEl.style.display = 'block';
-    statusEl.textContent = 'Checking...';
-    statusEl.style.color = '#7f8c8d';
 
-    checkTimeout = setTimeout(() => {
-        fetch(`/api/check-patient-id/${id}`)
-            .then(res => res.json())
-            .then(data => {
-                if (data.available) {
-                    statusEl.textContent = '✓ ID available';
-                    statusEl.style.color = '#27ae60';
-                } else {
-                    statusEl.textContent = '✗ ID already exists - please choose another';
-                    statusEl.style.color = '#e74c3c';
-                }
-            });
-    }, 500);
+<script>
+console.log('Patient form JavaScript loaded');
+
+// =====================================================
+// NOTIFICATION SYSTEM
+// =====================================================
+function showNotification(title, message, type = 'info') {
+    const container = document.getElementById('notification-container');
+    const notification = document.createElement('div');
+    notification.className = `notification ${type}`;
+    notification.innerHTML = `
+        <div class="notification-close" onclick="this.parentElement.remove()">×</div>
+        <div class="notification-title">${title}</div>
+        <div class="notification-message">${message}</div>
+    `;
+
+    container.appendChild(notification);
+
+    setTimeout(() => {
+        notification.style.animation = 'slideOut 0.3s ease';
+        setTimeout(() => notification.remove(), 300);
+    }, 5000);
 }
 
-// Conditional field handlers
+// =====================================================
+// PATIENT ID MANAGEMENT
+// =====================================================
+let checkTimeout;
+let periodicCheckInterval;
+let currentPatientId = null;
+let isUserEditingId = false;
+let lastCheckedId = null;
+
+function checkPatientIdAvailability(id, isPeriodicCheck = false) {
+    console.log('Checking Patient ID availability:', id, 'Periodic:', isPeriodicCheck);
+    const statusEl = document.getElementById('id-status');
+
+    if (!statusEl) {
+        console.error('Status element not found!');
+        return;
+    }
+
+    if (!isPeriodicCheck) {
+        statusEl.className = 'patient-id-status checking';
+        statusEl.textContent = 'Checking...';
+    }
+
+    const url = `/api/check_patient_id/${id}`;
+    console.log('Fetching:', url);
+
+    fetch(url)
+        .then(res => {
+            console.log('API Response status:', res.status);
+            return res.json();
+        })
+        .then(data => {
+            console.log('API Response data:', data);
+            if (data.available) {
+                statusEl.className = 'patient-id-status available';
+                statusEl.textContent = '✓ Available';
+                currentPatientId = id;
+                lastCheckedId = id;
+            } else {
+                statusEl.className = 'patient-id-status unavailable';
+                statusEl.textContent = '✗ Already taken';
+
+                if (isPeriodicCheck && lastCheckedId === id) {
+                    showNotification(
+                        'Patient ID No Longer Available',
+                        `ID ${id} was taken by another user. Auto-incrementing to next available ID...`,
+                        'warning'
+                    );
+                    fetchNextAvailableId();
+                }
+                lastCheckedId = id;
+            }
+        })
+        .catch(error => {
+            console.error('Error checking patient ID:', error);
+            statusEl.className = 'patient-id-status checking';
+            statusEl.textContent = 'Error checking ID';
+        });
+}
+
+function fetchNextAvailableId() {
+    console.log('Fetching next available ID');
+    fetch('/api/next_available_patient_id')
+        .then(res => res.json())
+        .then(data => {
+            console.log('Next ID response:', data);
+            if (data.next_id) {
+                document.getElementById('patient_id').value = data.next_id;
+                currentPatientId = data.next_id;
+                checkPatientIdAvailability(data.next_id);
+                setTimeout(() => {
+                    showNotification('ID Updated', `Patient ID has been updated to ${data.next_id}`, 'success');
+                }, 500);
+            }
+        })
+        .catch(error => {
+            console.error('Error fetching next ID:', error);
+            showNotification('Error', 'Could not fetch next available ID. Please enter manually.', 'error');
+        });
+}
+
+function periodicIdCheck() {
+    if (!isUserEditingId) {
+        const currentId = parseInt(document.getElementById('patient_id').value);
+        if (currentId && currentId >= 1 && currentId <= 99999) {
+            checkPatientIdAvailability(currentId, true);
+        }
+    }
+}
+
+// =====================================================
+// CONDITIONAL FIELD HANDLERS
+// =====================================================
 function handleLensStatus(value) {
-    document.getElementById('locs_fields').classList.toggle('active', value === 'Phakic');
-    document.getElementById('iol_fields').classList.toggle('active', value === 'Pseudophakic');
-    document.getElementById('aphakia_fields').classList.toggle('active', value === 'Aphakic');
+    console.log('handleLensStatus called with:', value);
+    const locsFields = document.getElementById('locs_fields');
+    const iolFields = document.getElementById('iol_fields');
+    const aphakiaFields = document.getElementById('aphakia_fields');
+
+    if (locsFields) {
+        if (value === 'Phakic') {
+            locsFields.classList.add('active');
+            console.log('LOCS fields activated');
+        } else {
+            locsFields.classList.remove('active');
+        }
+    }
+    if (iolFields) {
+        if (value === 'Pseudophakic') {
+            iolFields.classList.add('active');
+        } else {
+            iolFields.classList.remove('active');
+        }
+    }
+    if (aphakiaFields) {
+        if (value === 'Aphakic') {
+            aphakiaFields.classList.add('active');
+        } else {
+            aphakiaFields.classList.remove('active');
+        }
+    }
 }
 
 function handleGlaucoma(value) {
-    document.getElementById('oht_pac_fields').classList.toggle('active', value === '0');
-    document.getElementById('glaucoma_etiology_fields').classList.toggle('active', value === '1');
+    console.log('handleGlaucoma called with:', value);
+    const ohtPacFields = document.getElementById('oht_pac_fields');
+    const glaucomaEtiologyFields = document.getElementById('glaucoma_etiology_fields');
+
+    if (ohtPacFields) {
+        if (value === '0') {
+            ohtPacFields.classList.add('active');
+            console.log('OHT/PAC fields activated');
+        } else {
+            ohtPacFields.classList.remove('active');
+        }
+    }
+    if (glaucomaEtiologyFields) {
+        if (value === '1') {
+            glaucomaEtiologyFields.classList.add('active');
+            console.log('Glaucoma etiology fields activated');
+        } else {
+            glaucomaEtiologyFields.classList.remove('active');
+        }
+    }
 }
 
 function handleDR(value) {
-    document.getElementById('dr_stage_fields').classList.toggle('active', value === '1');
+    const drStageFields = document.getElementById('dr_stage_fields');
+    if (drStageFields) {
+        if (value === '1') {
+            drStageFields.classList.add('active');
+        } else {
+            drStageFields.classList.remove('active');
+        }
+    }
 }
 
 function handleDRStage(value) {
-    document.getElementById('npdr_stage_fields').classList.toggle('active', value === 'NPDR');
-    document.getElementById('pdr_stage_fields').classList.toggle('active', value === 'PDR');
+    const npdrFields = document.getElementById('npdr_stage_fields');
+    const pdrFields = document.getElementById('pdr_stage_fields');
+
+    if (npdrFields) {
+        if (value === 'NPDR') {
+            npdrFields.classList.add('active');
+        } else {
+            npdrFields.classList.remove('active');
+        }
+    }
+    if (pdrFields) {
+        if (value === 'PDR') {
+            pdrFields.classList.add('active');
+        } else {
+            pdrFields.classList.remove('active');
+        }
+    }
 }
 
 function handleME(value) {
-    document.getElementById('me_etiology_fields').classList.toggle('active', value === '1');
+    const meEtiologyFields = document.getElementById('me_etiology_fields');
+    if (meEtiologyFields) {
+        if (value === '1') {
+            meEtiologyFields.classList.add('active');
+        } else {
+            meEtiologyFields.classList.remove('active');
+        }
+    }
 }
 
 function handleMD(value) {
-    document.getElementById('md_etiology_fields').classList.toggle('active', value === '1');
+    const mdEtiologyFields = document.getElementById('md_etiology_fields');
+    if (mdEtiologyFields) {
+        if (value === '1') {
+            mdEtiologyFields.classList.add('active');
+        } else {
+            mdEtiologyFields.classList.remove('active');
+        }
+    }
 }
 
 function handleMDEtiology(value) {
-    document.getElementById('amd_stage_fields').classList.toggle('active', value === 'AMD');
-    document.getElementById('other_md_stage_fields').classList.toggle('active', value === 'Other' || value === 'ND');
+    const amdStageFields = document.getElementById('amd_stage_fields');
+    const otherMdStageFields = document.getElementById('other_md_stage_fields');
+
+    if (amdStageFields) {
+        if (value === 'AMD') {
+            amdStageFields.classList.add('active');
+        } else {
+            amdStageFields.classList.remove('active');
+        }
+    }
+    if (otherMdStageFields) {
+        if (value === 'Other' || value === 'ND') {
+            otherMdStageFields.classList.add('active');
+        } else {
+            otherMdStageFields.classList.remove('active');
+        }
+    }
 }
 
 function handleAMDStage(value) {
-    const showExudation = ['nAMD', 'nAMD+GA', 'ND'].includes(value);
-    document.getElementById('amd_exudation_fields').classList.toggle('active', showExudation);
+    const amdExudationFields = document.getElementById('amd_exudation_fields');
+    if (amdExudationFields) {
+        if (value === 'nAMD' || value === 'nAMD+GA' || value === 'ND') {
+            amdExudationFields.classList.add('active');
+        } else {
+            amdExudationFields.classList.remove('active');
+        }
+    }
 }
 
 function handleOtherMDStage(value) {
-    document.getElementById('other_md_exudation_fields').classList.toggle('active', value !== 'ND');
+    const otherMdExudationFields = document.getElementById('other_md_exudation_fields');
+    if (otherMdExudationFields) {
+        if (value !== '' && value !== '0') {
+            otherMdExudationFields.classList.add('active');
+        } else {
+            otherMdExudationFields.classList.remove('active');
+        }
+    }
 }
 
 function handleMHVMT(value) {
-    document.getElementById('mh_vmt_fields').classList.toggle('active', value === '1');
+    const mhVmtFields = document.getElementById('mh_vmt_fields');
+    if (mhVmtFields) {
+        if (value === '1') {
+            mhVmtFields.classList.add('active');
+        } else {
+            mhVmtFields.classList.remove('active');
+        }
+    }
 }
 
 function handleMHVMTEtiology(value) {
-    document.getElementById('secondary_mh_vmt_fields').classList.toggle('active', value === 'Secondary');
+    const secondaryMhVmtFields = document.getElementById('secondary_mh_vmt_fields');
+    if (secondaryMhVmtFields) {
+        if (value === 'Secondary') {
+            secondaryMhVmtFields.classList.add('active');
+        } else {
+            secondaryMhVmtFields.classList.remove('active');
+        }
+    }
 }
 
 function handleERM(value) {
-    document.getElementById('erm_fields').classList.toggle('active', value === '1');
+    const ermFields = document.getElementById('erm_fields');
+    if (ermFields) {
+        if (value === '1') {
+            ermFields.classList.add('active');
+        } else {
+            ermFields.classList.remove('active');
+        }
+    }
 }
 
 function handleERMEtiology(value) {
-    document.getElementById('secondary_erm_fields').classList.toggle('active', value === 'Secondary');
+    const secondaryErmFields = document.getElementById('secondary_erm_fields');
+    if (secondaryErmFields) {
+        if (value === 'Secondary') {
+            secondaryErmFields.classList.add('active');
+        } else {
+            secondaryErmFields.classList.remove('active');
+        }
+    }
 }
 
 function handleRD(value) {
-    const showFields = value !== '0' && value !== 'ND';
-    document.getElementById('rd_fields').classList.toggle('active', showFields);
+    const rdFields = document.getElementById('rd_fields');
+    if (rdFields) {
+        if (value !== '0' && value !== '') {
+            rdFields.classList.add('active');
+        } else {
+            rdFields.classList.remove('active');
+        }
+    }
 }
 
 function handleVO(value) {
-    document.getElementById('vh_etiology_fields').classList.toggle('active', value === 'Vitreous haemorrhage');
+    const vhEtiologyFields = document.getElementById('vh_etiology_fields');
+    if (vhEtiologyFields) {
+        if (value === 'Vitreous haemorrhage') {
+            vhEtiologyFields.classList.add('active');
+        } else {
+            vhEtiologyFields.classList.remove('active');
+        }
+    }
 }
 
-// Add more repeatable items
+// =====================================================
+// REPEATABLE ITEMS
+// =====================================================
 function addOtherOcularCondition() {
     const container = document.getElementById('other_ocular_conditions_container');
+    if (!container) return;
     const item = container.firstElementChild.cloneNode(true);
     item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
-
     const removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.className = 'remove-btn';
     removeBtn.textContent = '✕ Remove';
     removeBtn.onclick = function() { this.parentElement.remove(); };
     item.appendChild(removeBtn);
-
     container.appendChild(item);
 }
 
-// Form validation before submit
-document.getElementById('patientForm').addEventListener('submit', function(e) {
-    e.preventDefault();
+function addPreviousSurgery() {
+    const container = document.getElementById('previous_surgeries_container');
+    if (!container) return;
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+    container.appendChild(item);
+}
 
-    // Validate patient ID is available
+function addSystemicCondition() {
+    const container = document.getElementById('systemic_conditions_container');
+    if (!container) return;
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+    container.appendChild(item);
+}
+
+function addOcularMedication() {
+    const container = document.getElementById('ocular_medications_container');
+    if (!container) return;
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+    item.querySelectorAll('input').forEach(input => input.value = '');
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+    container.appendChild(item);
+}
+
+function addSystemicMedication() {
+    const container = document.getElementById('systemic_medications_container');
+    if (!container) return;
+    const item = container.firstElementChild.cloneNode(true);
+    item.querySelectorAll('select').forEach(select => select.selectedIndex = 0);
+    item.querySelectorAll('input').forEach(input => input.value = '');
+    const removeBtn = document.createElement('button');
+    removeBtn.type = 'button';
+    removeBtn.className = 'remove-btn';
+    removeBtn.textContent = '✕ Remove';
+    removeBtn.onclick = function() { this.parentElement.remove(); };
+    item.appendChild(removeBtn);
+    container.appendChild(item);
+}
+
+// =====================================================
+// FORM VALIDATION
+// =====================================================
+function validateForm() {
+    clearInterval(periodicCheckInterval);
     const idStatus = document.getElementById('id-status');
-    if (idStatus.textContent.includes('already exists')) {
-        alert('Patient ID is already in use. Please choose a different ID.');
+    if (idStatus && idStatus.textContent.includes('Already taken')) {
+        showNotification('Invalid Patient ID', 'Patient ID is already in use. Please choose a different ID.', 'error');
+        periodicCheckInterval = setInterval(periodicIdCheck, 3000);
         return false;
     }
-
-    // Validate MBO format
     const mbo = document.getElementById('mbo').value;
     if (!/^\d{9}$/.test(mbo)) {
-        alert('MBO must be exactly 9 digits.');
+        showNotification('Invalid MBO', 'MBO must be exactly 9 digits.', 'error');
+        periodicCheckInterval = setInterval(periodicIdCheck, 3000);
         return false;
     }
-
-    // Validate dates
     const dobDay = document.querySelector('[name="dob_day"]').value;
     const dobMonth = document.querySelector('[name="dob_month"]').value;
     const dobYear = document.querySelector('[name="dob_year"]').value;
-
     const colDay = document.querySelector('[name="collection_day"]').value;
     const colMonth = document.querySelector('[name="collection_month"]').value;
     const colYear = document.querySelector('[name="collection_year"]').value;
-
     if (!dobDay || !dobMonth || !dobYear || !colDay || !colMonth || !colYear) {
-        alert('Please fill in all date fields.');
+        showNotification('Incomplete Dates', 'Please fill in all date fields.', 'error');
+        periodicCheckInterval = setInterval(periodicIdCheck, 3000);
         return false;
     }
-
     const dob = new Date(dobYear, dobMonth - 1, dobDay);
     const collection = new Date(colYear, colMonth - 1, colDay);
-
     if (collection <= dob) {
-        alert('Date of sample collection must be after date of birth.');
+        showNotification('Invalid Dates', 'Date of sample collection must be after date of birth.', 'error');
+        periodicCheckInterval = setInterval(periodicIdCheck, 3000);
         return false;
     }
-
-    // If all validations pass, submit the form
     if (confirm('Are you sure you want to save this patient record?')) {
-        this.submit();
+        return true;
+    } else {
+        periodicCheckInterval = setInterval(periodicIdCheck, 3000);
+        return false;
     }
-});
+}
 
-// Initialize conditional fields on page load to ensure they show correctly
+// =====================================================
+// INITIALIZATION
+// =====================================================
 document.addEventListener('DOMContentLoaded', function() {
-    // Trigger all handlers to ensure proper initial state
+    console.log('DOM Content Loaded - Initializing...');
+
+    const patientIdField = document.getElementById('patient_id');
+    console.log('Patient ID field:', patientIdField);
+    console.log('Patient ID value:', patientIdField ? patientIdField.value : 'Field not found');
+
+    if (patientIdField && patientIdField.value) {
+        currentPatientId = parseInt(patientIdField.value);
+        lastCheckedId = currentPatientId;
+        console.log('Starting ID check for:', currentPatientId);
+        checkPatientIdAvailability(currentPatientId);
+        console.log('Starting periodic checking (every 3 seconds)');
+        periodicCheckInterval = setInterval(periodicIdCheck, 3000);
+
+        patientIdField.addEventListener('input', function() {
+            isUserEditingId = true;
+            clearTimeout(checkTimeout);
+            const id = parseInt(this.value);
+            if (id && id >= 1 && id <= 99999) {
+                checkTimeout = setTimeout(() => {
+                    checkPatientIdAvailability(id);
+                    isUserEditingId = false;
+                }, 500);
+            }
+        });
+
+        patientIdField.addEventListener('blur', function() {
+            isUserEditingId = false;
+            const id = parseInt(this.value);
+            if (id && id >= 1 && id <= 99999) {
+                checkPatientIdAvailability(id);
+            }
+        });
+    } else {
+        console.warn('Patient ID field not found or has no value!');
+    }
+
+    const form = document.getElementById('patientForm');
+    if (form) {
+        console.log('Form found, adding submit handler');
+        form.addEventListener('submit', function(e) {
+            e.preventDefault();
+            if (validateForm()) {
+                this.submit();
+            }
+        });
+    } else {
+        console.warn('Form not found!');
+    }
+
+    console.log('Initializing conditional fields...');
     const lensStatus = document.getElementById('lens_status');
-    if (lensStatus) handleLensStatus(lensStatus.value);
-
+    if (lensStatus) {
+        console.log('Lens Status found, value:', lensStatus.value);
+        handleLensStatus(lensStatus.value);
+    }
     const glaucoma = document.getElementById('glaucoma');
-    if (glaucoma) handleGlaucoma(glaucoma.value);
-
+    if (glaucoma) {
+        console.log('Glaucoma found, value:', glaucoma.value);
+        handleGlaucoma(glaucoma.value);
+    }
     const dr = document.getElementById('diabetic_retinopathy');
     if (dr) handleDR(dr.value);
-
     const drStage = document.getElementById('dr_stage');
     if (drStage) handleDRStage(drStage.value);
-
     const me = document.getElementById('macular_edema');
     if (me) handleME(me.value);
-
     const md = document.getElementById('macular_degeneration');
     if (md) handleMD(md.value);
-
     const mdEtiology = document.getElementById('md_etiology');
     if (mdEtiology) handleMDEtiology(mdEtiology.value);
-
     const amdStage = document.getElementById('amd_stage');
     if (amdStage) handleAMDStage(amdStage.value);
-
     const otherMdStage = document.getElementById('other_md_stage');
     if (otherMdStage) handleOtherMDStage(otherMdStage.value);
-
     const mhVmt = document.getElementById('mh_vmt');
     if (mhVmt) handleMHVMT(mhVmt.value);
-
     const mhVmtEtiology = document.getElementById('mh_vmt_etiology');
     if (mhVmtEtiology) handleMHVMTEtiology(mhVmtEtiology.value);
-
     const erm = document.getElementById('epiretinal_membrane');
     if (erm) handleERM(erm.value);
-
     const ermEtiology = document.getElementById('erm_etiology');
     if (ermEtiology) handleERMEtiology(ermEtiology.value);
-
     const rd = document.getElementById('retinal_detachment');
     if (rd) handleRD(rd.value);
-
     const vo = document.getElementById('vitreous_opacification');
     if (vo) handleVO(vo.value);
+    console.log('Initialization complete!');
+});
+
+window.addEventListener('beforeunload', function() {
+    if (periodicCheckInterval) {
+        clearInterval(periodicCheckInterval);
+    }
 });
 </script>
 {% endblock %}

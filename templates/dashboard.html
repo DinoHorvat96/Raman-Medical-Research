@@ -26,9 +26,9 @@
         </a>
 
         {% if session.role == 'Administrator' %}
-        <a href="{{ url_for('user_management') }}" class="btn btn-secondary" style="padding: 40px 20px; font-size: 16px;">
-            <div style="font-size: 32px; margin-bottom: 10px;">👥</div>
-            User Management
+        <a href="{{ url_for('settings') }}" class="btn btn-secondary" style="padding: 40px 20px; font-size: 16px;">
+            <div style="font-size: 32px; margin-bottom: 10px;">⚙️</div>
+            Settings
         </a>
         {% endif %}
     </div>
