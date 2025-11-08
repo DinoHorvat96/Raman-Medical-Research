@@ -192,6 +192,21 @@
         font-size: 14px;
         line-height: 1.6;
     }
+
+    .warning-box {
+        background: #fff3cd;
+        border-left: 4px solid #ffc107;
+        padding: 15px 20px;
+        margin-bottom: 20px;
+        border-radius: 4px;
+    }
+
+    .warning-box p {
+        margin: 0;
+        color: #856404;
+        font-size: 14px;
+        line-height: 1.6;
+    }
 </style>
 
 <div class="export-container">
@@ -200,9 +215,21 @@
         <a href="{{ url_for('dashboard') }}" class="btn btn-secondary">Back to Dashboard</a>
     </div>
 
-    <div class="info-box">
-        <p><strong>Note:</strong> All exported data is anonymized for statistical analysis. Patient names and MBO numbers are not included. Person Hash is used to identify multiple entries from the same individual.</p>
+    {% if session.role == 'Staff' %}
+    <div class="warning-box">
+        <p><strong>Staff Access:</strong> You can only export anonymized data. Patient names and MBO numbers are not included in your exports.</p>
     </div>
+    {% endif %}
+
+    {% if session.role == 'Administrator' %}
+    <div class="info-box">
+        <p><strong>Administrator Access:</strong> You can export both sensitive and anonymized data. Choose your preferred format below.</p>
+    </div>
+    {% else %}
+    <div class="info-box">
+        <p><strong>Note:</strong> All exported data is anonymized for statistical analysis. Person Hash is used to identify multiple entries from the same individual.</p>
+    </div>
+    {% endif %}
 
     <!-- Statistics Overview -->
     <div class="stats-grid">
@@ -258,6 +285,22 @@
                     </div>
                 </div>
             </div>
+
+            {% if session.role == 'Administrator' %}
+            <div class="option-group">
+                <div class="option-title">Data Privacy Level (Administrator Only)</div>
+                <div class="format-options">
+                    <div class="radio-item">
+                        <input type="radio" id="data_type_anonymized" name="data_type" value="anonymized" checked>
+                        <label for="data_type_anonymized">Anonymized (Person Hash, no names/MBO)</label>
+                    </div>
+                    <div class="radio-item">
+                        <input type="radio" id="data_type_sensitive" name="data_type" value="sensitive">
+                        <label for="data_type_sensitive">Sensitive (Includes Patient Names & MBO)</label>
+                    </div>
+                </div>
+            </div>
+            {% endif %}
 
             <div class="option-group">
                 <div class="option-title">Data to Include</div>
@@ -316,24 +359,6 @@
 
 <script>
 document.getElementById('exportForm').addEventListener('submit', function(e) {
-    const format = document.querySelector('input[name="format"]:checked').value;
-
-    if (format === 'excel') {
-        // Check if at least one data type is selected
-        const hasSelection =
-            document.getElementById('include_conditions').checked ||
-            document.getElementById('include_other_conditions').checked ||
-            document.getElementById('include_surgeries').checked ||
-            document.getElementById('include_systemic').checked ||
-            document.getElementById('include_medications').checked;
-
-        if (!hasSelection) {
-            e.preventDefault();
-            alert('Please select at least one data type to export.');
-            return false;
-        }
-    }
-
     // Show loading indicator
     const button = e.target.querySelector('.btn-export');
     const originalText = button.innerHTML;

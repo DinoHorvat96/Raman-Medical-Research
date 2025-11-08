@@ -1381,10 +1381,10 @@ def edit_patient(patient_id):
 
 # Export Data Route
 
-@app.route('/export-data', methods=['GET', 'POST'])
-@staff_or_admin_required
+@app.route('/export_data', methods=['GET', 'POST'])
+@login_required
 def export_data():
-    """Export statistical data"""
+    """Export statistical data with role-based access"""
     conn = get_db_connection()
     if not conn:
         flash('Database connection error', 'error')
@@ -1436,81 +1436,278 @@ def export_data():
         if request.method == 'POST':
             # Handle export
             export_format = request.form.get('format', 'csv')
+            data_type = request.form.get('data_type', 'anonymized')
+
+            # Staff can only export anonymized data
+            if session.get('role') == 'Staff':
+                data_type = 'anonymized'
 
             # Get date range if provided
             date_from = request.form.get('date_from')
             date_to = request.form.get('date_to')
 
-            # Build query based on selected data types
+            # Get data inclusion options
             include_conditions = 'include_conditions' in request.form
             include_other_conditions = 'include_other_conditions' in request.form
             include_surgeries = 'include_surgeries' in request.form
             include_systemic = 'include_systemic' in request.form
             include_medications = 'include_medications' in request.form
 
-            # Basic query for statistical data
-            query = '''
-                SELECT 
-                    ps.patient_id,
-                    pst.person_hash,
-                    pst.age,
-                    pst.sex,
-                    pst.eye
-            '''
-
-            if include_conditions:
-                query += ''',
-                    oc.lens_status,
-                    oc.glaucoma,
-                    oc.diabetic_retinopathy,
-                    oc.macular_edema
+            # Build the main query
+            if data_type == 'sensitive' and session.get('role') == 'Administrator':
+                # Sensitive export includes names and MBO
+                base_query = '''
+                    SELECT 
+                        ps.patient_id,
+                        ps.patient_name,
+                        ps.mbo,
+                        ps.date_of_birth,
+                        ps.date_of_sample_collection,
+                        pst.person_hash,
+                        pst.age,
+                        pst.sex,
+                        pst.eye
+                '''
+            else:
+                # Anonymized export
+                base_query = '''
+                    SELECT 
+                        ps.patient_id,
+                        pst.person_hash,
+                        pst.age,
+                        pst.sex,
+                        pst.eye
                 '''
 
-            query += '''
+            # Add ocular conditions if requested
+            if include_conditions:
+                base_query += ''',
+                    oc.lens_status,
+                    oc.locs_iii_no,
+                    oc.locs_iii_nc,
+                    oc.locs_iii_c,
+                    oc.locs_iii_p,
+                    oc.iol_type,
+                    oc.etiology_aphakia,
+                    oc.glaucoma,
+                    oc.oht_or_pac,
+                    oc.etiology_glaucoma,
+                    oc.steroid_responder,
+                    oc.pxs,
+                    oc.pds,
+                    oc.diabetic_retinopathy,
+                    oc.stage_diabetic_retinopathy,
+                    oc.stage_npdr,
+                    oc.stage_pdr,
+                    oc.macular_edema,
+                    oc.etiology_macular_edema,
+                    oc.macular_degeneration_dystrophy,
+                    oc.etiology_macular_deg_dyst,
+                    oc.stage_amd,
+                    oc.exudation_amd,
+                    oc.stage_other_macular_deg,
+                    oc.exudation_other_macular_deg,
+                    oc.macular_hole_vmt,
+                    oc.etiology_mh_vmt,
+                    oc.cause_secondary_mh_vmt,
+                    oc.treatment_status_mh_vmt,
+                    oc.epiretinal_membrane,
+                    oc.etiology_erm,
+                    oc.cause_secondary_erm,
+                    oc.treatment_status_erm,
+                    oc.retinal_detachment,
+                    oc.etiology_rd,
+                    oc.treatment_status_rd,
+                    oc.pvr,
+                    oc.vitreous_haemorrhage_opacification,
+                    oc.etiology_vitreous_haemorrhage
+                '''
+
+            base_query += '''
                 FROM patients_sensitive ps
                 JOIN patients_statistical pst ON ps.patient_id = pst.patient_id
             '''
 
             if include_conditions:
-                query += ' LEFT JOIN ocular_conditions oc ON ps.patient_id = oc.patient_id'
+                base_query += ' LEFT JOIN ocular_conditions oc ON ps.patient_id = oc.patient_id'
 
-            query += ' WHERE 1=1'
+            base_query += ' WHERE 1=1'
 
             params = []
             if date_from:
-                query += ' AND ps.date_of_sample_collection >= %s'
+                base_query += ' AND ps.date_of_sample_collection >= %s'
                 params.append(date_from)
             if date_to:
-                query += ' AND ps.date_of_sample_collection <= %s'
+                base_query += ' AND ps.date_of_sample_collection <= %s'
                 params.append(date_to)
 
-            query += ' ORDER BY ps.patient_id'
+            base_query += ' ORDER BY ps.patient_id'
 
-            cur.execute(query, params)
-            data = cur.fetchall()
+            cur.execute(base_query, params)
+            patients_data = cur.fetchall()
 
-            cur.close()
-            conn.close()
+            # Convert to list of dicts for easier manipulation
+            export_data = []
+            for row in patients_data:
+                patient_dict = dict(row)
 
+                # Add other ocular conditions if requested
+                if include_other_conditions:
+                    cur.execute('''
+                        SELECT icd10_code, eye 
+                        FROM other_ocular_conditions 
+                        WHERE patient_id = %s
+                        ORDER BY id
+                    ''', (row['patient_id'],))
+                    other_conds = cur.fetchall()
+
+                    # Create dynamic columns for other conditions
+                    for idx, cond in enumerate(other_conds, 1):
+                        patient_dict[f'other_ocular_condition_{idx}'] = cond['icd10_code']
+                        patient_dict[f'other_ocular_condition_{idx}_eye'] = cond['eye']
+
+                # Add surgeries if requested
+                if include_surgeries:
+                    cur.execute('''
+                        SELECT surgery_code, eye 
+                        FROM previous_ocular_surgeries 
+                        WHERE patient_id = %s
+                        ORDER BY id
+                    ''', (row['patient_id'],))
+                    surgeries = cur.fetchall()
+
+                    for idx, surgery in enumerate(surgeries, 1):
+                        patient_dict[f'surgery_{idx}'] = surgery['surgery_code']
+                        patient_dict[f'surgery_{idx}_eye'] = surgery['eye']
+
+                # Add systemic conditions if requested
+                if include_systemic:
+                    cur.execute('''
+                        SELECT icd10_code 
+                        FROM systemic_conditions 
+                        WHERE patient_id = %s
+                        ORDER BY id
+                    ''', (row['patient_id'],))
+                    sys_conds = cur.fetchall()
+
+                    for idx, cond in enumerate(sys_conds, 1):
+                        patient_dict[f'systemic_condition_{idx}'] = cond['icd10_code']
+
+                # Add medications if requested
+                if include_medications:
+                    # Ocular medications
+                    cur.execute('''
+                        SELECT generic_name, eye, last_application_days 
+                        FROM ocular_medications 
+                        WHERE patient_id = %s
+                        ORDER BY id
+                    ''', (row['patient_id'],))
+                    ocular_meds = cur.fetchall()
+
+                    for idx, med in enumerate(ocular_meds, 1):
+                        patient_dict[f'ocular_medication_{idx}'] = med['generic_name']
+                        patient_dict[f'ocular_medication_{idx}_eye'] = med['eye']
+                        patient_dict[f'ocular_medication_{idx}_last_app_days'] = med['last_application_days']
+
+                    # Systemic medications
+                    cur.execute('''
+                        SELECT generic_name, last_application_days 
+                        FROM systemic_medications 
+                        WHERE patient_id = %s
+                        ORDER BY id
+                    ''', (row['patient_id'],))
+                    sys_meds = cur.fetchall()
+
+                    for idx, med in enumerate(sys_meds, 1):
+                        patient_dict[f'systemic_medication_{idx}'] = med['generic_name']
+                        patient_dict[f'systemic_medication_{idx}_last_app_days'] = med['last_application_days']
+
+                export_data.append(patient_dict)
+
+            # Generate export file
             if export_format == 'csv':
                 # Generate CSV
                 output = io.StringIO()
-                if data:
-                    writer = csv.DictWriter(output, fieldnames=data[0].keys())
+                if export_data:
+                    # Get all unique keys across all patients
+                    all_keys = set()
+                    for row in export_data:
+                        all_keys.update(row.keys())
+                    fieldnames = sorted(list(all_keys))
+
+                    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction='ignore')
                     writer.writeheader()
-                    writer.writerows(data)
+                    writer.writerows(export_data)
 
                 from flask import Response
+                filename_type = 'sensitive' if data_type == 'sensitive' else 'anonymized'
                 return Response(
                     output.getvalue(),
                     mimetype='text/csv',
                     headers={
-                        'Content-Disposition': f'attachment; filename=raman_export_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'}
+                        'Content-Disposition': f'attachment; filename=raman_export_{filename_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+                    }
                 )
 
-            # For excel format, would need openpyxl implementation
-            flash('Excel export not yet implemented', 'info')
-            return redirect(url_for('export_data'))
+            elif export_format == 'excel':
+                # Generate Excel file using openpyxl
+                try:
+                    from openpyxl import Workbook
+                    from openpyxl.styles import Font, PatternFill, Alignment
+                    from openpyxl.utils import get_column_letter
+
+                    wb = Workbook()
+                    ws = wb.active
+                    ws.title = "Patient Data"
+
+                    if export_data:
+                        # Get all unique keys
+                        all_keys = set()
+                        for row in export_data:
+                            all_keys.update(row.keys())
+                        fieldnames = sorted(list(all_keys))
+
+                        # Write headers
+                        header_fill = PatternFill(start_color="3498db", end_color="3498db", fill_type="solid")
+                        header_font = Font(bold=True, color="FFFFFF")
+
+                        for col_idx, fieldname in enumerate(fieldnames, 1):
+                            cell = ws.cell(row=1, column=col_idx, value=fieldname)
+                            cell.fill = header_fill
+                            cell.font = header_font
+                            cell.alignment = Alignment(horizontal='center')
+
+                        # Write data
+                        for row_idx, data_row in enumerate(export_data, 2):
+                            for col_idx, fieldname in enumerate(fieldnames, 1):
+                                value = data_row.get(fieldname, '')
+                                # Convert dates to strings
+                                if isinstance(value, (date, datetime)):
+                                    value = value.strftime('%Y-%m-%d')
+                                ws.cell(row=row_idx, column=col_idx, value=value)
+
+                        # Auto-adjust column widths
+                        for col_idx in range(1, len(fieldnames) + 1):
+                            ws.column_dimensions[get_column_letter(col_idx)].width = 15
+
+                    # Save to BytesIO
+                    excel_output = io.BytesIO()
+                    wb.save(excel_output)
+                    excel_output.seek(0)
+
+                    from flask import Response
+                    filename_type = 'sensitive' if data_type == 'sensitive' else 'anonymized'
+                    return Response(
+                        excel_output.getvalue(),
+                        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                        headers={
+                            'Content-Disposition': f'attachment; filename=raman_export_{filename_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+                        }
+                    )
+
+                except ImportError:
+                    flash('Excel export requires openpyxl. Please run: pip install openpyxl', 'error')
+                    return redirect(url_for('export_data'))
 
         cur.close()
         conn.close()
