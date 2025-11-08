@@ -205,7 +205,7 @@
                     <div class="form-group">
                         <label for="glaucoma_etiology">Etiology (if Glaucoma = 1)</label>
                         <select name="glaucoma_etiology">
-                            {% set g_etiol_val = ocular_conditions.glaucoma_etiology if ocular_conditions else 'ND' %}
+                            {% set g_etiol_val = ocular_conditions.etiology_glaucoma if ocular_conditions else 'ND' %}
                             <option value="ND" {% if g_etiol_val == 'ND' %}selected{% endif %}>ND</option>
                             <option value="POAG" {% if g_etiol_val == 'POAG' %}selected{% endif %}>POAG (primary open angle)</option>
                             <option value="NTG" {% if g_etiol_val == 'NTG' %}selected{% endif %}>NTG (normal tension)</option>
@@ -271,18 +271,18 @@
                     <div class="form-group">
                         <label for="dr_stage">Stage (Diabetic Retinopathy)</label>
                         <select id="dr_stage" name="dr_stage" onchange="handleDRStage(this.value)">
-                            {% set dr_stage_val = ocular_conditions.dr_stage if ocular_conditions else 'ND' %}
+                            {% set dr_stage_val = ocular_conditions.stage_diabetic_retinopathy if ocular_conditions else 'ND' %}
                             <option value="ND" {% if dr_stage_val == 'ND' %}selected{% endif %}>ND</option>
                             <option value="NPDR" {% if dr_stage_val == 'NPDR' %}selected{% endif %}>NPDR (nonproliferative)</option>
                             <option value="PDR" {% if dr_stage_val == 'PDR' %}selected{% endif %}>PDR (proliferative)</option>
                         </select>
                     </div>
 
-                    <div id="npdr_stage_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.dr_stage == 'NPDR' %}active{% endif %}">
+                    <div id="npdr_stage_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.stage_diabetic_retinopathy == 'NPDR' %}active{% endif %}">
                         <div class="form-group">
                             <label for="npdr_stage">Stage (NPDR)</label>
                             <select name="npdr_stage">
-                                {% set npdr_val = ocular_conditions.npdr_stage if ocular_conditions else 'ND' %}
+                                {% set npdr_val = ocular_conditions.stage_npdr if ocular_conditions else 'ND' %}
                                 <option value="ND" {% if npdr_val == 'ND' %}selected{% endif %}>ND</option>
                                 <option value="Mild" {% if npdr_val == 'Mild' %}selected{% endif %}>Mild</option>
                                 <option value="Moderate" {% if npdr_val == 'Moderate' %}selected{% endif %}>Moderate</option>
@@ -291,11 +291,11 @@
                         </div>
                     </div>
 
-                    <div id="pdr_stage_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.dr_stage == 'PDR' %}active{% endif %}">
+                    <div id="pdr_stage_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.stage_diabetic_retinopathy == 'PDR' %}active{% endif %}">
                         <div class="form-group">
                             <label for="pdr_stage">Stage (PDR)</label>
                             <select name="pdr_stage">
-                                {% set pdr_val = ocular_conditions.pdr_stage if ocular_conditions else 'ND' %}
+                                {% set pdr_val = ocular_conditions.stage_pdr if ocular_conditions else 'ND' %}
                                 <option value="ND" {% if pdr_val == 'ND' %}selected{% endif %}>ND</option>
                                 <option value="Active" {% if pdr_val == 'Active' %}selected{% endif %}>Active</option>
                                 <option value="Inactive" {% if pdr_val == 'Inactive' %}selected{% endif %}>Inactive</option>
@@ -323,7 +323,7 @@
                     <div class="form-group">
                         <label for="me_etiology">Etiology (Macular Edema)</label>
                         <select name="me_etiology">
-                            {% set me_etiol_val = ocular_conditions.me_etiology if ocular_conditions else 'ND' %}
+                            {% set me_etiol_val = ocular_conditions.etiology_macular_edema if ocular_conditions else 'ND' %}
                             <option value="ND" {% if me_etiol_val == 'ND' %}selected{% endif %}>ND</option>
                             <option value="DME" {% if me_etiol_val == 'DME' %}selected{% endif %}>DME (diabetic macular edema)</option>
                             <option value="RVO-ME" {% if me_etiol_val == 'RVO-ME' %}selected{% endif %}>RVO-ME (retinal vein occlusion edema)</option>
@@ -339,7 +339,7 @@
                     <div class="form-group">
                         <label for="macular_degeneration">Macular Degeneration/Dystrophy</label>
                         <select id="macular_degeneration" name="macular_degeneration" onchange="handleMD(this.value)">
-                            {% set md_val = ocular_conditions.macular_degeneration if ocular_conditions else '0' %}
+                            {% set md_val = ocular_conditions.macular_degeneration_dystrophy if ocular_conditions else '0' %}
                             <option value="0" {% if md_val == '0' %}selected{% endif %}>0</option>
                             <option value="1" {% if md_val == '1' %}selected{% endif %}>1</option>
                             <option value="ND" {% if md_val == 'ND' %}selected{% endif %}>ND</option>
@@ -351,18 +351,18 @@
                     <div class="form-group">
                         <label for="md_etiology">Etiology</label>
                         <select id="md_etiology" name="md_etiology" onchange="handleMDEtiology(this.value)">
-                            {% set md_etiol_val = ocular_conditions.md_etiology if ocular_conditions else 'ND' %}
+                            {% set md_etiol_val = ocular_conditions.etiology_macular_deg_dyst if ocular_conditions else 'ND' %}
                             <option value="ND" {% if md_etiol_val == 'ND' %}selected{% endif %}>ND</option>
                             <option value="AMD" {% if md_etiol_val == 'AMD' %}selected{% endif %}>AMD</option>
                             <option value="Other" {% if md_etiol_val == 'Other' %}selected{% endif %}>Other</option>
                         </select>
                     </div>
 
-                    <div id="amd_stage_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.md_etiology == 'AMD' %}active{% endif %}">
+                    <div id="amd_stage_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.etiology_macular_deg_dyst == 'AMD' %}active{% endif %}">
                         <div class="form-group">
                             <label for="amd_stage">Stage (AMD)</label>
                             <select id="amd_stage" name="amd_stage" onchange="handleAMDStage(this.value)">
-                                {% set amd_stage_val = ocular_conditions.amd_stage if ocular_conditions else 'ND' %}
+                                {% set amd_stage_val = ocular_conditions.stage_amd if ocular_conditions else 'ND' %}
                                 <option value="ND" {% if amd_stage_val == 'ND' %}selected{% endif %}>ND</option>
                                 <option value="Early" {% if amd_stage_val == 'Early' %}selected{% endif %}>Early</option>
                                 <option value="Intermediate" {% if amd_stage_val == 'Intermediate' %}selected{% endif %}>Intermediate</option>
@@ -372,11 +372,11 @@
                             </select>
                         </div>
 
-                        <div id="amd_exudation_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.amd_stage in ['nAMD', 'nAMD+GA', 'ND'] %}active{% endif %}">
+                        <div id="amd_exudation_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.stage_amd in ['nAMD', 'nAMD+GA', 'ND'] %}active{% endif %}">
                             <div class="form-group">
                                 <label for="amd_exudation">Exudation (AMD)</label>
                                 <select name="amd_exudation">
-                                    {% set amd_exud_val = ocular_conditions.amd_exudation if ocular_conditions else '0' %}
+                                    {% set amd_exud_val = ocular_conditions.exudation_amd if ocular_conditions else '0' %}
                                     <option value="0" {% if amd_exud_val == '0' %}selected{% endif %}>0</option>
                                     <option value="1" {% if amd_exud_val == '1' %}selected{% endif %}>1</option>
                                     <option value="ND" {% if amd_exud_val == 'ND' %}selected{% endif %}>ND</option>
@@ -385,22 +385,22 @@
                         </div>
                     </div>
 
-                    <div id="other_md_stage_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.md_etiology in ['Other', 'ND'] %}active{% endif %}">
+                    <div id="other_md_stage_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.etiology_macular_deg_dyst in ['Other', 'ND'] %}active{% endif %}">
                         <div class="form-group">
                             <label for="other_md_stage">Stage (Other Macular Degeneration/Dystrophy)</label>
                             <select id="other_md_stage" name="other_md_stage" onchange="handleOtherMDStage(this.value)">
-                                {% set other_md_stage_val = ocular_conditions.other_md_stage if ocular_conditions else 'ND' %}
+                                {% set other_md_stage_val = ocular_conditions.stage_other_macular_deg if ocular_conditions else 'ND' %}
                                 <option value="ND" {% if other_md_stage_val == 'ND' %}selected{% endif %}>ND</option>
                                 <option value="Non-neovascular" {% if other_md_stage_val == 'Non-neovascular' %}selected{% endif %}>Non-neovascular</option>
                                 <option value="Neovascular" {% if other_md_stage_val == 'Neovascular' %}selected{% endif %}>Neovascular</option>
                             </select>
                         </div>
 
-                        <div id="other_md_exudation_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.other_md_stage != 'ND' %}active{% endif %}">
+                        <div id="other_md_exudation_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.stage_other_macular_deg != 'ND' %}active{% endif %}">
                             <div class="form-group">
                                 <label for="other_md_exudation">Exudation (Other Macular Degeneration/Dystrophy)</label>
                                 <select name="other_md_exudation">
-                                    {% set other_md_exud_val = ocular_conditions.other_md_exudation if ocular_conditions else '0' %}
+                                    {% set other_md_exud_val = ocular_conditions.exudation_other_macular_deg if ocular_conditions else '0' %}
                                     <option value="0" {% if other_md_exud_val == '0' %}selected{% endif %}>0</option>
                                     <option value="1" {% if other_md_exud_val == '1' %}selected{% endif %}>1</option>
                                     <option value="ND" {% if other_md_exud_val == 'ND' %}selected{% endif %}>ND</option>
@@ -416,7 +416,7 @@
                     <div class="form-group">
                         <label for="mh_vmt">Macular Hole / Vitreomacular Traction</label>
                         <select id="mh_vmt" name="mh_vmt" onchange="handleMHVMT(this.value)">
-                            {% set mh_vmt_val = ocular_conditions.mh_vmt if ocular_conditions else '0' %}
+                            {% set mh_vmt_val = ocular_conditions.macular_hole_vmt if ocular_conditions else '0' %}
                             <option value="0" {% if mh_vmt_val == '0' %}selected{% endif %}>0</option>
                             <option value="1" {% if mh_vmt_val == '1' %}selected{% endif %}>1</option>
                             <option value="ND" {% if mh_vmt_val == 'ND' %}selected{% endif %}>ND</option>
@@ -428,18 +428,18 @@
                     <div class="form-group">
                         <label for="mh_vmt_etiology">Etiology (MH/VMT)</label>
                         <select id="mh_vmt_etiology" name="mh_vmt_etiology" onchange="handleMHVMTEtiology(this.value)">
-                            {% set mh_vmt_etiol_val = ocular_conditions.mh_vmt_etiology if ocular_conditions else 'ND' %}
+                            {% set mh_vmt_etiol_val = ocular_conditions.etiology_mh_vmt if ocular_conditions else 'ND' %}
                             <option value="ND" {% if mh_vmt_etiol_val == 'ND' %}selected{% endif %}>ND</option>
                             <option value="Idiopathic" {% if mh_vmt_etiol_val == 'Idiopathic' %}selected{% endif %}>Idiopathic</option>
                             <option value="Secondary" {% if mh_vmt_etiol_val == 'Secondary' %}selected{% endif %}>Secondary</option>
                         </select>
                     </div>
 
-                    <div id="secondary_mh_vmt_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.mh_vmt_etiology == 'Secondary' %}active{% endif %}">
+                    <div id="secondary_mh_vmt_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.etiology_mh_vmt == 'Secondary' %}active{% endif %}">
                         <div class="form-group">
                             <label for="secondary_mh_vmt_cause">Cause (Secondary MH/VMT)</label>
                             <select name="secondary_mh_vmt_cause">
-                                {% set sec_mh_vmt_val = ocular_conditions.secondary_mh_vmt_cause if ocular_conditions else 'ND' %}
+                                {% set sec_mh_vmt_val = ocular_conditions.cause_secondary_mh_vmt if ocular_conditions else 'ND' %}
                                 <option value="ND" {% if sec_mh_vmt_val == 'ND' %}selected{% endif %}>ND</option>
                                 <option value="MTM" {% if sec_mh_vmt_val == 'MTM' %}selected{% endif %}>MTM (myopic traction maculopathy)</option>
                                 <option value="Retinal detachment" {% if sec_mh_vmt_val == 'Retinal detachment' %}selected{% endif %}>Retinal detachment</option>
@@ -451,7 +451,7 @@
                     <div class="form-group">
                         <label for="mh_vmt_treatment_status">Treatment Status Prior to Sample Collection (MH/VMT)</label>
                         <select name="mh_vmt_treatment_status">
-                            {% set mh_vmt_tx_val = ocular_conditions.mh_vmt_treatment_status if ocular_conditions else 'ND' %}
+                            {% set mh_vmt_tx_val = ocular_conditions.treatment_status_mh_vmt if ocular_conditions else 'ND' %}
                             <option value="ND" {% if mh_vmt_tx_val == 'ND' %}selected{% endif %}>ND</option>
                             <option value="Untreated" {% if mh_vmt_tx_val == 'Untreated' %}selected{% endif %}>Untreated</option>
                             <option value="Treated-persistent/recurrent" {% if mh_vmt_tx_val == 'Treated-persistent/recurrent' %}selected{% endif %}>Treated - persistent/recurrent</option>
@@ -479,18 +479,18 @@
                     <div class="form-group">
                         <label for="erm_etiology">Etiology (ERM)</label>
                         <select id="erm_etiology" name="erm_etiology" onchange="handleERMEtiology(this.value)">
-                            {% set erm_etiol_val = ocular_conditions.erm_etiology if ocular_conditions else 'ND' %}
+                            {% set erm_etiol_val = ocular_conditions.etiology_erm if ocular_conditions else 'ND' %}
                             <option value="ND" {% if erm_etiol_val == 'ND' %}selected{% endif %}>ND</option>
                             <option value="Idiopathic" {% if erm_etiol_val == 'Idiopathic' %}selected{% endif %}>Idiopathic</option>
                             <option value="Secondary" {% if erm_etiol_val == 'Secondary' %}selected{% endif %}>Secondary</option>
                         </select>
                     </div>
 
-                    <div id="secondary_erm_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.erm_etiology == 'Secondary' %}active{% endif %}">
+                    <div id="secondary_erm_fields" class="conditional-field {% if ocular_conditions and ocular_conditions.etiology_erm == 'Secondary' %}active{% endif %}">
                         <div class="form-group">
                             <label for="secondary_erm_cause">Cause (Secondary ERM)</label>
                             <select name="secondary_erm_cause">
-                                {% set sec_erm_val = ocular_conditions.secondary_erm_cause if ocular_conditions else 'ND' %}
+                                {% set sec_erm_val = ocular_conditions.cause_secondary_erm if ocular_conditions else 'ND' %}
                                 <option value="ND" {% if sec_erm_val == 'ND' %}selected{% endif %}>ND</option>
                                 <option value="DR" {% if sec_erm_val == 'DR' %}selected{% endif %}>DR (diabetic retinopathy)</option>
                                 <option value="RVO" {% if sec_erm_val == 'RVO' %}selected{% endif %}>RVO (retinal vein occlusion)</option>
@@ -506,7 +506,7 @@
                     <div class="form-group">
                         <label for="erm_treatment_status">Treatment Status Prior to Sample Collection (ERM)</label>
                         <select name="erm_treatment_status">
-                            {% set erm_tx_val = ocular_conditions.erm_treatment_status if ocular_conditions else 'ND' %}
+                            {% set erm_tx_val = ocular_conditions.treatment_status_erm if ocular_conditions else 'ND' %}
                             <option value="ND" {% if erm_tx_val == 'ND' %}selected{% endif %}>ND</option>
                             <option value="Untreated" {% if erm_tx_val == 'Untreated' %}selected{% endif %}>Untreated</option>
                             <option value="Treated-recurrent" {% if erm_tx_val == 'Treated-recurrent' %}selected{% endif %}>Treated - recurrent</option>
@@ -536,7 +536,7 @@
                     <div class="form-group">
                         <label for="rd_etiology">Etiology (RD)</label>
                         <select name="rd_etiology">
-                            {% set rd_etiol_val = ocular_conditions.rd_etiology if ocular_conditions else 'ND' %}
+                            {% set rd_etiol_val = ocular_conditions.etiology_rd if ocular_conditions else 'ND' %}
                             <option value="ND" {% if rd_etiol_val == 'ND' %}selected{% endif %}>ND</option>
                             <option value="Rhegmatogenous" {% if rd_etiol_val == 'Rhegmatogenous' %}selected{% endif %}>Rhegmatogenous</option>
                             <option value="Tractional" {% if rd_etiol_val == 'Tractional' %}selected{% endif %}>Tractional</option>
@@ -550,7 +550,7 @@
                     <div class="form-group">
                         <label for="rd_treatment_status">Treatment Status Prior to Sample Collection (RD)</label>
                         <select name="rd_treatment_status">
-                            {% set rd_tx_val = ocular_conditions.rd_treatment_status if ocular_conditions else 'ND' %}
+                            {% set rd_tx_val = ocular_conditions.treatment_status_rd if ocular_conditions else 'ND' %}
                             <option value="ND" {% if rd_tx_val == 'ND' %}selected{% endif %}>ND</option>
                             <option value="Untreated" {% if rd_tx_val == 'Untreated' %}selected{% endif %}>Untreated</option>
                             <option value="Treated (PPV + oil tamponade)" {% if rd_tx_val == 'Treated (PPV + oil tamponade)' %}selected{% endif %}>Treated (PPV + oil tamponade)</option>
@@ -578,7 +578,7 @@
                     <div class="form-group">
                         <label for="vitreous_opacification">Vitreous Haemorrhage / Other Vitreous Opacification</label>
                         <select id="vitreous_opacification" name="vitreous_opacification" onchange="handleVO(this.value)">
-                            {% set vo_val = ocular_conditions.vitreous_opacification if ocular_conditions else '0' %}
+                            {% set vo_val = ocular_conditions.vitreous_haemorrhage_opacification if ocular_conditions else '0' %}
                             <option value="0" {% if vo_val == '0' %}selected{% endif %}>0</option>
                             <option value="Vitreous haemorrhage" {% if vo_val == 'Vitreous haemorrhage' %}selected{% endif %}>Vitreous haemorrhage</option>
                             <option value="Synchisis scintillans" {% if vo_val == 'Synchisis scintillans' %}selected{% endif %}>Synchisis scintillans</option>
@@ -595,7 +595,7 @@
                     <div class="form-group">
                         <label for="vh_etiology">Etiology (Vitreous Haemorrhage)</label>
                         <select name="vh_etiology">
-                            {% set vh_etiol_val = ocular_conditions.vh_etiology if ocular_conditions else 'ND' %}
+                            {% set vh_etiol_val = ocular_conditions.etiology_vitreous_haemorrhage if ocular_conditions else 'ND' %}
                             <option value="ND" {% if vh_etiol_val == 'ND' %}selected{% endif %}>ND</option>
                             <option value="PDR" {% if vh_etiol_val == 'PDR' %}selected{% endif %}>PDR</option>
                             <option value="RVO" {% if vh_etiol_val == 'RVO' %}selected{% endif %}>RVO</option>

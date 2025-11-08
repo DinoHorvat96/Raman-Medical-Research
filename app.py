@@ -1237,7 +1237,7 @@ def edit_patient(patient_id):
         etiology_aphakia = request.form.get('aphakia_etiology', 'ND')
         glaucoma = request.form.get('glaucoma', '0')
         oht_or_pac = request.form.get('oht_or_pac', 'ND')
-        etiology_glaucoma = request.form.get('etiology_glaucoma', 'ND')
+        etiology_glaucoma = request.form.get('glaucoma_etiology', 'ND')
         steroid_responder = request.form.get('steroid_responder', 'ND')
         pxs = request.form.get('pxs', '0')
         pds = request.form.get('pds', '0')
