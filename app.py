@@ -1167,10 +1167,216 @@ def edit_patient(patient_id):
             return redirect(url_for('validate_data'))
 
     # POST - Update patient data
-    # (Similar structure to new_patient POST but with UPDATE statements)
-    # Implementation would be similar to the new_patient route but with UPDATE queries
-    flash('Patient update functionality not yet implemented', 'info')
-    return redirect(url_for('validate_data'))
+    try:
+        cur = conn.cursor()
+
+        # Get basic patient data
+        patient_name = request.form.get('patient_name')
+        mbo = request.form.get('mbo')
+        sex = request.form.get('sex')
+        eye = request.form.get('eye')
+
+        # Get date fields
+        dob_day = request.form.get('dob_day')
+        dob_month = request.form.get('dob_month')
+        dob_year = request.form.get('dob_year')
+        dosc_day = request.form.get('collection_day')
+        dosc_month = request.form.get('collection_month')
+        dosc_year = request.form.get('collection_year')
+
+        # Parse dates
+        date_of_birth = None
+        if dob_day and dob_month and dob_year:
+            try:
+                date_of_birth = date(int(dob_year), int(dob_month), int(dob_day))
+            except ValueError:
+                flash('Invalid date of birth', 'error')
+                return redirect(url_for('edit_patient', patient_id=patient_id))
+
+        date_of_sample_collection = None
+        if dosc_day and dosc_month and dosc_year:
+            try:
+                date_of_sample_collection = date(int(dosc_year), int(dosc_month), int(dosc_day))
+            except ValueError:
+                flash('Invalid sample collection date', 'error')
+                return redirect(url_for('edit_patient', patient_id=patient_id))
+
+        # Calculate age and person hash
+        age = None
+        if date_of_birth and date_of_sample_collection:
+            age = date_of_sample_collection.year - date_of_birth.year
+            if date_of_sample_collection.month < date_of_birth.month or \
+                    (date_of_sample_collection.month == date_of_birth.month and
+                     date_of_sample_collection.day < date_of_birth.day):
+                age -= 1
+
+        person_hash = hashlib.sha256(mbo.encode()).hexdigest() if mbo else None
+
+        # Update patients_sensitive table
+        cur.execute('''
+            UPDATE patients_sensitive
+            SET patient_name = %s, mbo = %s, date_of_birth = %s, 
+                date_of_sample_collection = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE patient_id = %s
+        ''', (patient_name, mbo, date_of_birth, date_of_sample_collection, patient_id))
+
+        # Update patients_statistical table
+        cur.execute('''
+            UPDATE patients_statistical
+            SET person_hash = %s, age = %s, sex = %s, eye = %s
+            WHERE patient_id = %s
+        ''', (person_hash, age, sex, eye, patient_id))
+
+        # Get all ocular condition fields
+        lens_status = request.form.get('lens_status', 'ND')
+        locs_iii_no = request.form.get('locs_no', 'ND')
+        locs_iii_nc = request.form.get('locs_nc', 'ND')
+        locs_iii_c = request.form.get('locs_c', 'ND')
+        locs_iii_p = request.form.get('locs_p', 'ND')
+        iol_type = request.form.get('iol_type', 'ND')
+        etiology_aphakia = request.form.get('aphakia_etiology', 'ND')
+        glaucoma = request.form.get('glaucoma', '0')
+        oht_or_pac = request.form.get('oht_or_pac', 'ND')
+        etiology_glaucoma = request.form.get('etiology_glaucoma', 'ND')
+        steroid_responder = request.form.get('steroid_responder', 'ND')
+        pxs = request.form.get('pxs', '0')
+        pds = request.form.get('pds', '0')
+        diabetic_retinopathy = request.form.get('diabetic_retinopathy', '0')
+        stage_diabetic_retinopathy = request.form.get('stage_diabetic_retinopathy', 'ND')
+        stage_npdr = request.form.get('stage_npdr', 'ND')
+        stage_pdr = request.form.get('stage_pdr', 'ND')
+        macular_edema = request.form.get('macular_edema', '0')
+        etiology_macular_edema = request.form.get('etiology_macular_edema', 'ND')
+        macular_degeneration = request.form.get('macular_degeneration_dystrophy', '0')
+        etiology_macular_deg = request.form.get('etiology_macular_deg_dyst', 'ND')
+        stage_amd = request.form.get('stage_amd', 'ND')
+        exudation_amd = request.form.get('exudation_amd', 'ND')
+        stage_other_macular = request.form.get('stage_other_macular_deg', 'ND')
+        exudation_other_macular = request.form.get('exudation_other_macular_deg', 'ND')
+        macular_hole_vmt = request.form.get('macular_hole_vmt', '0')
+        etiology_mh_vmt = request.form.get('etiology_mh_vmt', 'ND')
+        cause_secondary_mh_vmt = request.form.get('cause_secondary_mh_vmt', 'ND')
+        treatment_status_mh_vmt = request.form.get('treatment_status_mh_vmt', 'ND')
+        epiretinal_membrane = request.form.get('epiretinal_membrane', '0')
+        etiology_erm = request.form.get('etiology_erm', 'ND')
+        cause_secondary_erm = request.form.get('cause_secondary_erm', 'ND')
+        treatment_status_erm = request.form.get('treatment_status_erm', 'ND')
+        retinal_detachment = request.form.get('retinal_detachment', '0')
+        etiology_rd = request.form.get('etiology_rd', 'ND')
+        treatment_status_rd = request.form.get('treatment_status_rd', 'ND')
+        pvr = request.form.get('pvr', 'ND')
+        vitreous_haemorrhage = request.form.get('vitreous_haemorrhage_opacification', '0')
+        etiology_vitreous_haemorrhage = request.form.get('etiology_vitreous_haemorrhage', 'ND')
+
+        # Update ocular_conditions table
+        cur.execute('''
+            UPDATE ocular_conditions
+            SET lens_status = %s, locs_iii_no = %s, locs_iii_nc = %s, locs_iii_c = %s, locs_iii_p = %s,
+                iol_type = %s, etiology_aphakia = %s, glaucoma = %s, oht_or_pac = %s, etiology_glaucoma = %s,
+                steroid_responder = %s, pxs = %s, pds = %s, diabetic_retinopathy = %s,
+                stage_diabetic_retinopathy = %s, stage_npdr = %s, stage_pdr = %s, macular_edema = %s,
+                etiology_macular_edema = %s, macular_degeneration_dystrophy = %s,
+                etiology_macular_deg_dyst = %s, stage_amd = %s, exudation_amd = %s,
+                stage_other_macular_deg = %s, exudation_other_macular_deg = %s, macular_hole_vmt = %s,
+                etiology_mh_vmt = %s, cause_secondary_mh_vmt = %s, treatment_status_mh_vmt = %s,
+                epiretinal_membrane = %s, etiology_erm = %s, cause_secondary_erm = %s,
+                treatment_status_erm = %s, retinal_detachment = %s, etiology_rd = %s,
+                treatment_status_rd = %s, pvr = %s, vitreous_haemorrhage_opacification = %s,
+                etiology_vitreous_haemorrhage = %s, updated_at = CURRENT_TIMESTAMP
+            WHERE patient_id = %s
+        ''', (lens_status, locs_iii_no, locs_iii_nc, locs_iii_c, locs_iii_p,
+              iol_type, etiology_aphakia, glaucoma, oht_or_pac, etiology_glaucoma,
+              steroid_responder, pxs, pds, diabetic_retinopathy, stage_diabetic_retinopathy,
+              stage_npdr, stage_pdr, macular_edema, etiology_macular_edema,
+              macular_degeneration, etiology_macular_deg, stage_amd, exudation_amd,
+              stage_other_macular, exudation_other_macular, macular_hole_vmt, etiology_mh_vmt,
+              cause_secondary_mh_vmt, treatment_status_mh_vmt, epiretinal_membrane, etiology_erm,
+              cause_secondary_erm, treatment_status_erm, retinal_detachment, etiology_rd,
+              treatment_status_rd, pvr, vitreous_haemorrhage, etiology_vitreous_haemorrhage,
+              patient_id))
+
+        # Delete existing many-to-many relationships and re-insert
+        cur.execute('DELETE FROM other_ocular_conditions WHERE patient_id = %s', (patient_id,))
+        cur.execute('DELETE FROM previous_ocular_surgeries WHERE patient_id = %s', (patient_id,))
+        cur.execute('DELETE FROM systemic_conditions WHERE patient_id = %s', (patient_id,))
+        cur.execute('DELETE FROM ocular_medications WHERE patient_id = %s', (patient_id,))
+        cur.execute('DELETE FROM systemic_medications WHERE patient_id = %s', (patient_id,))
+
+        # Other Ocular Conditions (multiple entries possible)
+        other_ocular_conditions = request.form.getlist('other_ocular_condition[]')
+        other_ocular_eyes = request.form.getlist('other_ocular_condition_eye[]')
+        for icd10_code, eye_affected in zip(other_ocular_conditions, other_ocular_eyes):
+            if icd10_code and icd10_code not in ['0', 'ND']:
+                cur.execute('''
+                    INSERT INTO other_ocular_conditions (patient_id, icd10_code, eye)
+                    VALUES (%s, %s, %s)
+                ''', (patient_id, icd10_code, eye_affected))
+
+        # Previous Ocular Surgeries (multiple entries possible)
+        surgeries_list = request.form.getlist('previous_surgery[]')
+        surgeries_eyes = request.form.getlist('previous_surgery_eye[]')
+        for surgery_code, eye_affected in zip(surgeries_list, surgeries_eyes):
+            if surgery_code and surgery_code not in ['0', 'ND']:
+                cur.execute('''
+                    INSERT INTO previous_ocular_surgeries (patient_id, surgery_code, eye)
+                    VALUES (%s, %s, %s)
+                ''', (patient_id, surgery_code, eye_affected))
+
+        # Systemic Conditions (multiple entries possible)
+        systemic_conditions_list = request.form.getlist('systemic_condition[]')
+        for icd10_code in systemic_conditions_list:
+            if icd10_code and icd10_code not in ['0', 'ND']:
+                cur.execute('''
+                    INSERT INTO systemic_conditions (patient_id, icd10_code)
+                    VALUES (%s, %s)
+                ''', (patient_id, icd10_code))
+
+        # Ocular Medications (multiple entries possible)
+        ocular_meds_list = request.form.getlist('ocular_medication[]')
+        ocular_meds_eyes = request.form.getlist('ocular_medication_eye[]')
+        ocular_meds_days = request.form.getlist('ocular_medication_days[]')
+
+        for medication, eye_affected, last_app in zip(ocular_meds_list, ocular_meds_eyes, ocular_meds_days):
+            if medication and medication not in ['0', 'ND']:
+                # Split medication into trade_name|generic_name
+                parts = medication.split('|')
+                if len(parts) == 2:
+                    trade_name, generic_name = parts
+                    last_application_days = int(last_app) if last_app and last_app.isdigit() else None
+                    cur.execute('''
+                        INSERT INTO ocular_medications (patient_id, trade_name, generic_name, eye, last_application_days)
+                        VALUES (%s, %s, %s, %s, %s)
+                    ''', (patient_id, trade_name, generic_name, eye_affected, last_application_days))
+
+        # Systemic Medications (multiple entries possible)
+        systemic_meds_list = request.form.getlist('systemic_medication[]')
+        systemic_meds_days = request.form.getlist('systemic_medication_days[]')
+
+        for medication, last_app in zip(systemic_meds_list, systemic_meds_days):
+            if medication and medication not in ['0', 'ND']:
+                # Split medication into trade_name|generic_name
+                parts = medication.split('|')
+                if len(parts) == 2:
+                    trade_name, generic_name = parts
+                    last_application_days = int(last_app) if last_app and last_app.isdigit() else None
+                    cur.execute('''
+                        INSERT INTO systemic_medications (patient_id, trade_name, generic_name, last_application_days)
+                        VALUES (%s, %s, %s, %s)
+                    ''', (patient_id, trade_name, generic_name, last_application_days))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        flash(f'Patient #{patient_id:05d} - {patient_name} has been updated successfully!', 'success')
+        return redirect(url_for('validate_data'))
+
+    except Exception as e:
+        conn.rollback()
+        flash(f'Error updating patient: {str(e)}', 'error')
+        if conn:
+            conn.close()
+        return redirect(url_for('edit_patient', patient_id=patient_id))
 
 
 # Export Data Route
