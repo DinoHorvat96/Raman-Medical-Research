@@ -856,39 +856,39 @@ def new_patient():
 
         diabetic_retinopathy = request.form.get('diabetic_retinopathy')
         stage_diabetic_retinopathy = request.form.get(
-            'stage_diabetic_retinopathy') if diabetic_retinopathy == '1' else None
-        stage_npdr = request.form.get('stage_npdr') if stage_diabetic_retinopathy == 'NPDR' else None
-        stage_pdr = request.form.get('stage_pdr') if stage_diabetic_retinopathy == 'PDR' else None
+            'dr_stage') if diabetic_retinopathy == '1' else None
+        stage_npdr = request.form.get('npdr_stage') if stage_diabetic_retinopathy == 'NPDR' else None
+        stage_pdr = request.form.get('pdr_stage') if stage_diabetic_retinopathy == 'PDR' else None
 
         macular_edema = request.form.get('macular_edema')
-        etiology_macular_edema = request.form.get('etiology_macular_edema') if macular_edema == '1' else None
+        etiology_macular_edema = request.form.get('me_etiology') if macular_edema == '1' else None
 
-        macular_degeneration = request.form.get('macular_degeneration_dystrophy')
-        etiology_macular_deg = request.form.get('etiology_macular_deg_dyst') if macular_degeneration == '1' else None
-        stage_amd = request.form.get('stage_amd') if etiology_macular_deg == 'AMD' else None
-        exudation_amd = request.form.get('exudation_amd') if stage_amd in ['nAMD', 'nAMD+GA', 'ND'] else None
-        stage_other_macular = request.form.get('stage_other_macular_deg') if etiology_macular_deg == 'Other' else None
-        exudation_other_macular = request.form.get(
-            'exudation_other_macular_deg') if etiology_macular_deg == 'Other' else None
+        macular_degeneration_dystrophy = request.form.get('macular_degeneration')
+        etiology_macular_deg_dyst = request.form.get('md_etiology') if macular_degeneration_dystrophy == '1' else None
+        stage_amd = request.form.get('amd_stage') if etiology_macular_deg_dyst == 'AMD' else None
+        exudation_amd = request.form.get('amd_exudation') if stage_amd in ['nAMD', 'nAMD+GA', 'ND'] else None
+        stage_other_macular_deg = request.form.get('other_md_stage') if etiology_macular_deg_dyst == 'Other' else None
+        exudation_other_macular_deg = request.form.get(
+            'other_md_exudation') if etiology_macular_deg_dyst == 'Other' else None
 
-        macular_hole_vmt = request.form.get('macular_hole_vmt')
-        etiology_mh_vmt = request.form.get('etiology_mh_vmt') if macular_hole_vmt == '1' else None
-        cause_secondary_mh_vmt = request.form.get('cause_secondary_mh_vmt') if etiology_mh_vmt == 'Secondary' else None
-        treatment_status_mh_vmt = request.form.get('treatment_status_mh_vmt') if macular_hole_vmt == '1' else None
+        macular_hole_vmt = request.form.get('mh_vmt')
+        etiology_mh_vmt = request.form.get('mh_vmt_etiology') if macular_hole_vmt == '1' else None
+        cause_secondary_mh_vmt = request.form.get('secondary_mh_vmt_cause') if etiology_mh_vmt == 'Secondary' else None
+        treatment_status_mh_vmt = request.form.get('mh_vmt_treatment_status') if macular_hole_vmt == '1' else None
 
         epiretinal_membrane = request.form.get('epiretinal_membrane')
-        etiology_erm = request.form.get('etiology_erm') if epiretinal_membrane == '1' else None
-        cause_secondary_erm = request.form.get('cause_secondary_erm') if etiology_erm == 'Secondary' else None
-        treatment_status_erm = request.form.get('treatment_status_erm') if epiretinal_membrane == '1' else None
+        etiology_erm = request.form.get('erm_etiology') if epiretinal_membrane == '1' else None
+        cause_secondary_erm = request.form.get('secondary_erm_cause') if etiology_erm == 'Secondary' else None
+        treatment_status_erm = request.form.get('erm_treatment_status') if epiretinal_membrane == '1' else None
 
         retinal_detachment = request.form.get('retinal_detachment')
-        etiology_rd = request.form.get('etiology_rd') if retinal_detachment not in ['0', 'ND'] else None
-        treatment_status_rd = request.form.get('treatment_status_rd') if retinal_detachment not in ['0', 'ND'] else None
+        etiology_rd = request.form.get('rd_etiology') if retinal_detachment not in ['0', 'ND'] else None
+        treatment_status_rd = request.form.get('rd_treatment_status') if retinal_detachment not in ['0', 'ND'] else None
         pvr = request.form.get('pvr') if retinal_detachment not in ['0', 'ND'] else None
 
-        vitreous_haemorrhage = request.form.get('vitreous_haemorrhage_opacification')
+        vitreous_haemorrhage_opacification = request.form.get('vitreous_opacification')
         etiology_vitreous_haemorrhage = request.form.get(
-            'etiology_vitreous_haemorrhage') if vitreous_haemorrhage == 'Vitreous haemorrhage' else None
+            'vh_etiology') if vitreous_haemorrhage_opacification == 'Vitreous haemorrhage' else None
 
         # Insert ocular conditions
         cur.execute('''
@@ -908,11 +908,11 @@ def new_patient():
               iol_type, etiology_aphakia, glaucoma, oht_or_pac, etiology_glaucoma,
               steroid_responder, pxs, pds, diabetic_retinopathy, stage_diabetic_retinopathy,
               stage_npdr, stage_pdr, macular_edema, etiology_macular_edema,
-              macular_degeneration, etiology_macular_deg, stage_amd, exudation_amd,
-              stage_other_macular, exudation_other_macular, macular_hole_vmt, etiology_mh_vmt,
+              macular_degeneration_dystrophy, etiology_macular_deg_dyst, stage_amd, exudation_amd,
+              stage_other_macular_deg, exudation_other_macular_deg, macular_hole_vmt, etiology_mh_vmt,
               cause_secondary_mh_vmt, treatment_status_mh_vmt, epiretinal_membrane, etiology_erm,
               cause_secondary_erm, treatment_status_erm, retinal_detachment, etiology_rd,
-              treatment_status_rd, pvr, vitreous_haemorrhage, etiology_vitreous_haemorrhage))
+              treatment_status_rd, pvr, vitreous_haemorrhage_opacification, etiology_vitreous_haemorrhage))
 
         # Other Ocular Conditions (multiple entries possible)
         other_ocular_conditions = request.form.getlist('other_ocular_condition[]')
@@ -1150,7 +1150,7 @@ def edit_patient(patient_id):
             return render_template('edit_patient.html',
                                    patient=patient,
                                    ocular_conditions=ocular_conditions,
-                                   other_ocular=other_ocular,
+                                   other_conditions=other_ocular,
                                    surgeries=surgeries,
                                    systemic=systemic,
                                    ocular_meds=ocular_meds,
@@ -1242,31 +1242,31 @@ def edit_patient(patient_id):
         pxs = request.form.get('pxs', '0')
         pds = request.form.get('pds', '0')
         diabetic_retinopathy = request.form.get('diabetic_retinopathy', '0')
-        stage_diabetic_retinopathy = request.form.get('stage_diabetic_retinopathy', 'ND')
-        stage_npdr = request.form.get('stage_npdr', 'ND')
-        stage_pdr = request.form.get('stage_pdr', 'ND')
+        stage_diabetic_retinopathy = request.form.get('dr_stage', 'ND')
+        stage_npdr = request.form.get('npdr_stage', 'ND')
+        stage_pdr = request.form.get('pdr_stage', 'ND')
         macular_edema = request.form.get('macular_edema', '0')
-        etiology_macular_edema = request.form.get('etiology_macular_edema', 'ND')
-        macular_degeneration = request.form.get('macular_degeneration_dystrophy', '0')
-        etiology_macular_deg = request.form.get('etiology_macular_deg_dyst', 'ND')
-        stage_amd = request.form.get('stage_amd', 'ND')
-        exudation_amd = request.form.get('exudation_amd', 'ND')
-        stage_other_macular = request.form.get('stage_other_macular_deg', 'ND')
-        exudation_other_macular = request.form.get('exudation_other_macular_deg', 'ND')
-        macular_hole_vmt = request.form.get('macular_hole_vmt', '0')
-        etiology_mh_vmt = request.form.get('etiology_mh_vmt', 'ND')
-        cause_secondary_mh_vmt = request.form.get('cause_secondary_mh_vmt', 'ND')
-        treatment_status_mh_vmt = request.form.get('treatment_status_mh_vmt', 'ND')
+        etiology_macular_edema = request.form.get('me_etiology', 'ND')
+        macular_degeneration_dystrophy = request.form.get('macular_degeneration', '0')
+        etiology_macular_deg_dyst = request.form.get('md_etiology', 'ND')
+        stage_amd = request.form.get('amd_stage', 'ND')
+        exudation_amd = request.form.get('amd_exudation', 'ND')
+        stage_other_macular_deg = request.form.get('other_md_stage', 'ND')
+        exudation_other_macular_deg = request.form.get('other_md_exudation', 'ND')
+        macular_hole_vmt = request.form.get('mh_vmt', '0')
+        etiology_mh_vmt = request.form.get('mh_vmt_etiology', 'ND')
+        cause_secondary_mh_vmt = request.form.get('secondary_mh_vmt_cause', 'ND')
+        treatment_status_mh_vmt = request.form.get('mh_vmt_treatment_status', 'ND')
         epiretinal_membrane = request.form.get('epiretinal_membrane', '0')
-        etiology_erm = request.form.get('etiology_erm', 'ND')
-        cause_secondary_erm = request.form.get('cause_secondary_erm', 'ND')
-        treatment_status_erm = request.form.get('treatment_status_erm', 'ND')
+        etiology_erm = request.form.get('erm_etiology', 'ND')
+        cause_secondary_erm = request.form.get('secondary_erm_cause', 'ND')
+        treatment_status_erm = request.form.get('erm_treatment_status', 'ND')
         retinal_detachment = request.form.get('retinal_detachment', '0')
-        etiology_rd = request.form.get('etiology_rd', 'ND')
-        treatment_status_rd = request.form.get('treatment_status_rd', 'ND')
+        etiology_rd = request.form.get('rd_etiology', 'ND')
+        treatment_status_rd = request.form.get('rd_treatment_status', 'ND')
         pvr = request.form.get('pvr', 'ND')
-        vitreous_haemorrhage = request.form.get('vitreous_haemorrhage_opacification', '0')
-        etiology_vitreous_haemorrhage = request.form.get('etiology_vitreous_haemorrhage', 'ND')
+        vitreous_haemorrhage_opacification = request.form.get('vitreous_opacification', '0')
+        etiology_vitreous_haemorrhage = request.form.get('vh_etiology', 'ND')
 
         # Update ocular_conditions table
         cur.execute('''
@@ -1288,11 +1288,11 @@ def edit_patient(patient_id):
               iol_type, etiology_aphakia, glaucoma, oht_or_pac, etiology_glaucoma,
               steroid_responder, pxs, pds, diabetic_retinopathy, stage_diabetic_retinopathy,
               stage_npdr, stage_pdr, macular_edema, etiology_macular_edema,
-              macular_degeneration, etiology_macular_deg, stage_amd, exudation_amd,
-              stage_other_macular, exudation_other_macular, macular_hole_vmt, etiology_mh_vmt,
+              macular_degeneration_dystrophy, etiology_macular_deg_dyst, stage_amd, exudation_amd,
+              stage_other_macular_deg, exudation_other_macular_deg, macular_hole_vmt, etiology_mh_vmt,
               cause_secondary_mh_vmt, treatment_status_mh_vmt, epiretinal_membrane, etiology_erm,
               cause_secondary_erm, treatment_status_erm, retinal_detachment, etiology_rd,
-              treatment_status_rd, pvr, vitreous_haemorrhage, etiology_vitreous_haemorrhage,
+              treatment_status_rd, pvr, vitreous_haemorrhage_opacification, etiology_vitreous_haemorrhage,
               patient_id))
 
         # Delete existing many-to-many relationships and re-insert

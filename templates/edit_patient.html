@@ -619,39 +619,12 @@
                                 <label>ICD-10 Code</label>
                                 <select name="other_ocular_condition[]">
                                     <option value="0">0</option>
-                                    <option value="ND" {% if oc.icd10_code == 'ND' %}selected{% endif %}>ND</option>
-                                    <option value="H00" {% if oc.icd10_code == 'H00' %}selected{% endif %}>H00 - Hordeolum and chalazion</option>
-                                    <option value="H01" {% if oc.icd10_code == 'H01' %}selected{% endif %}>H01 - Other inflammation of eyelid</option>
-                                    <option value="H02" {% if oc.icd10_code == 'H02' %}selected{% endif %}>H02 - Other disorders of eyelid</option>
-                                    <option value="H04" {% if oc.icd10_code == 'H04' %}selected{% endif %}>H04 - Disorders of lacrimal system</option>
-                                    <option value="H05" {% if oc.icd10_code == 'H05' %}selected{% endif %}>H05 - Disorders of orbit</option>
-                                    <option value="H10" {% if oc.icd10_code == 'H10' %}selected{% endif %}>H10 - Conjunctivitis</option>
-                                    <option value="H11" {% if oc.icd10_code == 'H11' %}selected{% endif %}>H11 - Other disorders of conjunctiva</option>
-                                    <option value="H15" {% if oc.icd10_code == 'H15' %}selected{% endif %}>H15 - Disorders of sclera</option>
-                                    <option value="H16" {% if oc.icd10_code == 'H16' %}selected{% endif %}>H16 - Keratitis</option>
-                                    <option value="H17" {% if oc.icd10_code == 'H17' %}selected{% endif %}>H17 - Corneal scars and opacities</option>
-                                    <option value="H18" {% if oc.icd10_code == 'H18' %}selected{% endif %}>H18 - Other disorders of cornea</option>
-                                    <option value="H20" {% if oc.icd10_code == 'H20' %}selected{% endif %}>H20 - Iridocyclitis</option>
-                                    <option value="H21" {% if oc.icd10_code == 'H21' %}selected{% endif %}>H21 - Other disorders of iris and ciliary body</option>
-                                    <option value="H25" {% if oc.icd10_code == 'H25' %}selected{% endif %}>H25 - Senile cataract</option>
-                                    <option value="H26" {% if oc.icd10_code == 'H26' %}selected{% endif %}>H26 - Other cataract</option>
-                                    <option value="H27" {% if oc.icd10_code == 'H27' %}selected{% endif %}>H27 - Other disorders of lens</option>
-                                    <option value="H30" {% if oc.icd10_code == 'H30' %}selected{% endif %}>H30 - Chorioretinal inflammation</option>
-                                    <option value="H31" {% if oc.icd10_code == 'H31' %}selected{% endif %}>H31 - Other disorders of choroid</option>
-                                    <option value="H33" {% if oc.icd10_code == 'H33' %}selected{% endif %}>H33 - Retinal detachments and breaks</option>
-                                    <option value="H34" {% if oc.icd10_code == 'H34' %}selected{% endif %}>H34 - Retinal vascular occlusions</option>
-                                    <option value="H35" {% if oc.icd10_code == 'H35' %}selected{% endif %}>H35 - Other retinal disorders</option>
-                                    <option value="H36" {% if oc.icd10_code == 'H36' %}selected{% endif %}>H36 - Retinal disorders in diseases</option>
-                                    <option value="H40" {% if oc.icd10_code == 'H40' %}selected{% endif %}>H40 - Glaucoma</option>
-                                    <option value="H43" {% if oc.icd10_code == 'H43' %}selected{% endif %}>H43 - Disorders of vitreous body</option>
-                                    <option value="H44" {% if oc.icd10_code == 'H44' %}selected{% endif %}>H44 - Disorders of globe</option>
-                                    <option value="H46" {% if oc.icd10_code == 'H46' %}selected{% endif %}>H46 - Optic neuritis</option>
-                                    <option value="H47" {% if oc.icd10_code == 'H47' %}selected{% endif %}>H47 - Other disorders of optic nerve</option>
-                                    <option value="H49" {% if oc.icd10_code == 'H49' %}selected{% endif %}>H49 - Paralytic strabismus</option>
-                                    <option value="H50" {% if oc.icd10_code == 'H50' %}selected{% endif %}>H50 - Other strabismus</option>
-                                    <option value="H52" {% if oc.icd10_code == 'H52' %}selected{% endif %}>H52 - Disorders of refraction</option>
-                                    <option value="H53" {% if oc.icd10_code == 'H53' %}selected{% endif %}>H53 - Visual disturbances</option>
-                                    <option value="H54" {% if oc.icd10_code == 'H54' %}selected{% endif %}>H54 - Blindness and low vision</option>
+                                    <option value="ND">ND</option>
+                                    {% for code in icd10_ocular %}
+                                    <option value="{{ code.code }}" {% if oc.icd10_code == code.code %}selected{% endif %}>
+                                        {{ code.code }}{% if code.description %} - {{ code.description }}{% endif %}
+                                    </option>
+                                    {% endfor %}
                                 </select>
                             </div>
 
@@ -713,13 +686,12 @@
                                 <label>Surgery/Procedure</label>
                                 <select name="previous_surgery[]">
                                     <option value="0">0</option>
-                                    <option value="ND" {% if surgery.surgery_code == 'ND' %}selected{% endif %}>ND</option>
-                                    <option value="PPV" {% if surgery.surgery_code == 'PPV' %}selected{% endif %}>PPV</option>
-                                    <option value="Cataract surgery" {% if surgery.surgery_code == 'Cataract surgery' %}selected{% endif %}>Cataract surgery</option>
-                                    <option value="Trabeculectomy" {% if surgery.surgery_code == 'Trabeculectomy' %}selected{% endif %}>Trabeculectomy</option>
-                                    <option value="PRP" {% if surgery.surgery_code == 'PRP' %}selected{% endif %}>PRP</option>
-                                    <option value="Anti-VEGF injection" {% if surgery.surgery_code == 'Anti-VEGF injection' %}selected{% endif %}>Anti-VEGF injection</option>
-                                    <option value="YAG capsulotomy" {% if surgery.surgery_code == 'YAG capsulotomy' %}selected{% endif %}>YAG capsulotomy</option>
+                                    <option value="ND">ND</option>
+                                    {% for surg in surgeries_list %}
+                                    <option value="{{ surg.code }}" {% if surgery.surgery_code == surg.code %}selected{% endif %}>
+                                        {{ surg.code }}{% if surg.description %} - {{ surg.description }}{% endif %}
+                                    </option>
+                                    {% endfor %}
                                 </select>
                             </div>
                             <div class="form-group">
@@ -745,8 +717,8 @@
                             <select name="previous_surgery[]">
                                 <option value="0" selected>0</option>
                                 <option value="ND">ND</option>
-                                {% for surgery in surgeries %}
-                                <option value="{{ surgery.code }}">{{ surgery.code }} - {{ surgery.description }}</option>
+                                {% for surg in surgeries_list %}
+                                <option value="{{ surg.code }}">{{ surg.code }} - {{ surg.description }}</option>
                                 {% endfor %}
                             </select>
                         </div>
@@ -823,10 +795,15 @@
                                 <label>Medication (Generic Name)</label>
                                 <select name="ocular_medication[]">
                                     <option value="0">0</option>
-                                    <option value="ND" {% if med.generic_name == 'ND' %}selected{% endif %}>ND</option>
-                                    <option value="Latanoprost" {% if med.generic_name == 'Latanoprost' %}selected{% endif %}>Latanoprost</option>
-                                    <option value="Timolol" {% if med.generic_name == 'Timolol' %}selected{% endif %}>Timolol</option>
-                                    <option value="Dorzolamide" {% if med.generic_name == 'Dorzolamide' %}selected{% endif %}>Dorzolamide</option>
+                                    <option value="ND">ND</option>
+                                    {% for medication in medications %}
+                                        {% if medication.medication_type in ['Ocular', 'Both'] %}
+                                        <option value="{{ medication.trade_name }}|{{ medication.generic_name }}"
+                                                {% if med.trade_name == medication.trade_name and med.generic_name == medication.generic_name %}selected{% endif %}>
+                                        {{ medication.trade_name }} ({{ medication.generic_name }})
+                                        </option>
+                                        {% endif %}
+                                    {% endfor %}
                                 </select>
                             </div>
                             <div class="form-group">
@@ -840,7 +817,7 @@
                             </div>
                             <div class="form-group">
                                 <label>Days Before Collection (000-999)</label>
-                                <input type="number" name="ocular_medication_days[]" min="0" max="999" value="{{ med.days_before_collection if med.days_before_collection else '' }}" placeholder="000">
+                                <input type="number" name="ocular_medication_days[]" min="0" max="999" value="{{ med.last_application_days if med.last_application_days else '' }}" placeholder="000">
                             </div>
                         </div>
                         {% if not loop.first %}
@@ -854,14 +831,14 @@
                         <div class="form-group">
                             <label>Medication (Generic Name)</label>
                             <select name="ocular_medication[]">
-                                <option value="0" selected>0</option>
+                                <option value="0">0</option>
                                 <option value="ND">ND</option>
-                                {% for med in medications %}
-                                {% if med.medication_type in ['Ocular', 'Both'] %}
-                                <option value="{{ med.trade_name }}|{{ med.generic_name }}">
-                                    {{ med.trade_name }} ({{ med.generic_name }})
-                                </option>
-                                {% endif %}
+                                {% for medication in medications %}
+                                    {% if medication.medication_type in ['Ocular', 'Both'] %}
+                                    <option value="{{ medication.trade_name }}|{{ medication.generic_name }}">
+                                            {{ medication.trade_name }} ({{ medication.generic_name }})
+                                    </option>
+                                    {% endif %}
                                 {% endfor %}
                             </select>
                         </div>
@@ -899,15 +876,20 @@
                                 <label>Medication (Generic Name)</label>
                                 <select name="systemic_medication[]">
                                     <option value="0">0</option>
-                                    <option value="ND" {% if med.generic_name == 'ND' %}selected{% endif %}>ND</option>
-                                    <option value="Metformin" {% if med.generic_name == 'Metformin' %}selected{% endif %}>Metformin</option>
-                                    <option value="Insulin" {% if med.generic_name == 'Insulin' %}selected{% endif %}>Insulin</option>
-                                    <option value="Amlodipine" {% if med.generic_name == 'Amlodipine' %}selected{% endif %}>Amlodipine</option>
+                                    <option value="ND">ND</option>
+                                    {% for medication in medications %}
+                                        {% if medication.medication_type in ['Systemic', 'Both'] %}
+                                        <option value="{{ medication.trade_name }}|{{ medication.generic_name }}"
+                                                {% if med.trade_name == medication.trade_name and med.generic_name == medication.generic_name %}selected{% endif %}>
+                                            {{ medication.trade_name }} ({{ medication.generic_name }})
+                                        </option>
+                                        {% endif %}
+                                    {% endfor %}
                                 </select>
                             </div>
                             <div class="form-group">
                                 <label>Days Before Collection (000-999)</label>
-                                <input type="number" name="systemic_medication_days[]" min="0" max="999" value="{{ med.days_before_collection if med.days_before_collection else '' }}" placeholder="000">
+                                <input type="number" name="systemic_medication_days[]" min="0" max="999" value="{{ med.last_application_days if med.last_application_days else '' }}" placeholder="000">
                             </div>
                         </div>
                         {% if not loop.first %}
@@ -921,15 +903,15 @@
                         <div class="form-group">
                             <label>Medication (Generic Name)</label>
                             <select name="systemic_medication[]">
-                                <option value="0" selected>0</option>
+                                <option value="0">0</option>
                                 <option value="ND">ND</option>
-                                {% for med in medications %}
-                                {% if med.medication_type in ['Systemic', 'Both'] %}
-                                <option value="{{ med.trade_name }}|{{ med.generic_name }}">
-                                    {{ med.trade_name }} ({{ med.generic_name }})
+                                {% for medication in medications %}
+                                    {% if medication.medication_type in ['Systemic', 'Both'] %}
+                                    <option value="{{ medication.trade_name }}|{{ medication.generic_name }}">
+                                        {{ medication.trade_name }} ({{ medication.generic_name }})
                                 </option>
                                 {% endif %}
-                                {% endfor %}
+                            {% endfor %}
                             </select>
                         </div>
                         <div class="form-group">
