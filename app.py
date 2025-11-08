@@ -292,13 +292,13 @@ def init_database():
         # Insert default admin user if no users exist
         cur.execute("SELECT COUNT(*) FROM users")
         if cur.fetchone()[0] == 0:
-            admin_password = bcrypt.generate_password_hash('admin').decode('utf-8')
+            admin_password = bcrypt.generate_password_hash('admin123').decode('utf-8')
             cur.execute('''
                 INSERT INTO users (username, password_hash, email, role)
                 VALUES (%s, %s, %s, %s)
-            ''', ('admin', admin_password, 'None', 'Administrator'))
+            ''', ('Admin', admin_password, 'None', 'Administrator'))
             conn.commit()
-            print("✓ Default admin user created (username: admin, password: admin)")
+            print("✓ Default admin user created (username: Admin, password: admin123)")
             print("  ⚠️  IMPORTANT: Change the admin password after first login!")
 
         # Check if ICD-10 ocular conditions table is empty
