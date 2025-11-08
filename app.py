@@ -296,7 +296,7 @@ def init_database():
             cur.execute('''
                 INSERT INTO users (username, password_hash, email, role)
                 VALUES (%s, %s, %s, %s)
-            ''', ('admin', admin_password, 'admin@raman.local', 'Administrator'))
+            ''', ('admin', admin_password, 'None', 'Administrator'))
             conn.commit()
             print("✓ Default admin user created (username: admin, password: admin)")
             print("  ⚠️  IMPORTANT: Change the admin password after first login!")
@@ -1384,7 +1384,7 @@ def edit_patient(patient_id):
 @app.route('/export_data', methods=['GET', 'POST'])
 @login_required
 def export_data():
-    """Export statistical data with role-based access"""
+    """Export statistical data with role-based access and proper column ordering"""
     conn = get_db_connection()
     if not conn:
         flash('Database connection error', 'error')
@@ -1453,33 +1453,33 @@ def export_data():
             include_systemic = 'include_systemic' in request.form
             include_medications = 'include_medications' in request.form
 
-            # Build the main query
+            # Build the main query - with proper column ordering
             if data_type == 'sensitive' and session.get('role') == 'Administrator':
-                # Sensitive export includes names and MBO
+                # Sensitive export - includes names and MBO
                 base_query = '''
                     SELECT 
                         ps.patient_id,
                         ps.patient_name,
                         ps.mbo,
+                        pst.sex,
                         ps.date_of_birth,
                         ps.date_of_sample_collection,
+                        pst.eye,
                         pst.person_hash,
-                        pst.age,
-                        pst.sex,
-                        pst.eye
+                        pst.age
                 '''
             else:
-                # Anonymized export
+                # Anonymized export - order matches form layout (excluding sensitive fields)
                 base_query = '''
                     SELECT 
                         ps.patient_id,
                         pst.person_hash,
-                        pst.age,
                         pst.sex,
-                        pst.eye
+                        pst.eye,
+                        pst.age
                 '''
 
-            # Add ocular conditions if requested
+            # Add ocular conditions if requested - in order of appearance in form
             if include_conditions:
                 base_query += ''',
                     oc.lens_status,
@@ -1546,8 +1546,44 @@ def export_data():
             cur.execute(base_query, params)
             patients_data = cur.fetchall()
 
-            # Convert to list of dicts for easier manipulation
+            # Define column order - this ensures consistent ordering in exports
+            if data_type == 'sensitive' and session.get('role') == 'Administrator':
+                # Order matching form: ID, Name, MBO, Sex, DOB, DoSC, Eye, Hash, Age, then conditions
+                base_columns = [
+                    'patient_id', 'patient_name', 'mbo', 'sex', 'date_of_birth',
+                    'date_of_sample_collection', 'eye', 'person_hash', 'age'
+                ]
+            else:
+                # Order for anonymized: ID, Hash, Sex, Eye, Age, then conditions
+                base_columns = ['patient_id', 'person_hash', 'sex', 'eye', 'age']
+
+            # Add condition columns in order if included
+            condition_columns = []
+            if include_conditions:
+                condition_columns = [
+                    'lens_status', 'locs_iii_no', 'locs_iii_nc', 'locs_iii_c', 'locs_iii_p',
+                    'iol_type', 'etiology_aphakia', 'glaucoma', 'oht_or_pac', 'etiology_glaucoma',
+                    'steroid_responder', 'pxs', 'pds', 'diabetic_retinopathy', 'stage_diabetic_retinopathy',
+                    'stage_npdr', 'stage_pdr', 'macular_edema', 'etiology_macular_edema',
+                    'macular_degeneration_dystrophy', 'etiology_macular_deg_dyst', 'stage_amd',
+                    'exudation_amd', 'stage_other_macular_deg', 'exudation_other_macular_deg',
+                    'macular_hole_vmt', 'etiology_mh_vmt', 'cause_secondary_mh_vmt',
+                    'treatment_status_mh_vmt', 'epiretinal_membrane', 'etiology_erm',
+                    'cause_secondary_erm', 'treatment_status_erm', 'retinal_detachment',
+                    'etiology_rd', 'treatment_status_rd', 'pvr', 'vitreous_haemorrhage_opacification',
+                    'etiology_vitreous_haemorrhage'
+                ]
+
+            # Convert to list of dicts and add dynamic columns
             export_data = []
+            dynamic_columns = {
+                'other_conditions': [],
+                'surgeries': [],
+                'systemic': [],
+                'ocular_meds': [],
+                'systemic_meds': []
+            }
+
             for row in patients_data:
                 patient_dict = dict(row)
 
@@ -1561,10 +1597,13 @@ def export_data():
                     ''', (row['patient_id'],))
                     other_conds = cur.fetchall()
 
-                    # Create dynamic columns for other conditions
                     for idx, cond in enumerate(other_conds, 1):
-                        patient_dict[f'other_ocular_condition_{idx}'] = cond['icd10_code']
-                        patient_dict[f'other_ocular_condition_{idx}_eye'] = cond['eye']
+                        col_name = f'other_ocular_condition_{idx}'
+                        col_eye = f'other_ocular_condition_{idx}_eye'
+                        patient_dict[col_name] = cond['icd10_code']
+                        patient_dict[col_eye] = cond['eye']
+                        if col_name not in dynamic_columns['other_conditions']:
+                            dynamic_columns['other_conditions'].extend([col_name, col_eye])
 
                 # Add surgeries if requested
                 if include_surgeries:
@@ -1577,8 +1616,12 @@ def export_data():
                     surgeries = cur.fetchall()
 
                     for idx, surgery in enumerate(surgeries, 1):
-                        patient_dict[f'surgery_{idx}'] = surgery['surgery_code']
-                        patient_dict[f'surgery_{idx}_eye'] = surgery['eye']
+                        col_name = f'surgery_{idx}'
+                        col_eye = f'surgery_{idx}_eye'
+                        patient_dict[col_name] = surgery['surgery_code']
+                        patient_dict[col_eye] = surgery['eye']
+                        if col_name not in dynamic_columns['surgeries']:
+                            dynamic_columns['surgeries'].extend([col_name, col_eye])
 
                 # Add systemic conditions if requested
                 if include_systemic:
@@ -1591,7 +1634,10 @@ def export_data():
                     sys_conds = cur.fetchall()
 
                     for idx, cond in enumerate(sys_conds, 1):
-                        patient_dict[f'systemic_condition_{idx}'] = cond['icd10_code']
+                        col_name = f'systemic_condition_{idx}'
+                        patient_dict[col_name] = cond['icd10_code']
+                        if col_name not in dynamic_columns['systemic']:
+                            dynamic_columns['systemic'].append(col_name)
 
                 # Add medications if requested
                 if include_medications:
@@ -1605,9 +1651,14 @@ def export_data():
                     ocular_meds = cur.fetchall()
 
                     for idx, med in enumerate(ocular_meds, 1):
-                        patient_dict[f'ocular_medication_{idx}'] = med['generic_name']
-                        patient_dict[f'ocular_medication_{idx}_eye'] = med['eye']
-                        patient_dict[f'ocular_medication_{idx}_last_app_days'] = med['last_application_days']
+                        col_name = f'ocular_medication_{idx}'
+                        col_eye = f'ocular_medication_{idx}_eye'
+                        col_days = f'ocular_medication_{idx}_last_app_days'
+                        patient_dict[col_name] = med['generic_name']
+                        patient_dict[col_eye] = med['eye']
+                        patient_dict[col_days] = med['last_application_days']
+                        if col_name not in dynamic_columns['ocular_meds']:
+                            dynamic_columns['ocular_meds'].extend([col_name, col_eye, col_days])
 
                     # Systemic medications
                     cur.execute('''
@@ -1619,23 +1670,31 @@ def export_data():
                     sys_meds = cur.fetchall()
 
                     for idx, med in enumerate(sys_meds, 1):
-                        patient_dict[f'systemic_medication_{idx}'] = med['generic_name']
-                        patient_dict[f'systemic_medication_{idx}_last_app_days'] = med['last_application_days']
+                        col_name = f'systemic_medication_{idx}'
+                        col_days = f'systemic_medication_{idx}_last_app_days'
+                        patient_dict[col_name] = med['generic_name']
+                        patient_dict[col_days] = med['last_application_days']
+                        if col_name not in dynamic_columns['systemic_meds']:
+                            dynamic_columns['systemic_meds'].extend([col_name, col_days])
 
                 export_data.append(patient_dict)
 
+            # Build final column order
+            final_columns = base_columns + condition_columns
+
+            # Add dynamic columns in logical order
+            final_columns.extend(dynamic_columns['other_conditions'])
+            final_columns.extend(dynamic_columns['surgeries'])
+            final_columns.extend(dynamic_columns['systemic'])
+            final_columns.extend(dynamic_columns['ocular_meds'])
+            final_columns.extend(dynamic_columns['systemic_meds'])
+
             # Generate export file
             if export_format == 'csv':
-                # Generate CSV
+                # Generate CSV with proper column order
                 output = io.StringIO()
                 if export_data:
-                    # Get all unique keys across all patients
-                    all_keys = set()
-                    for row in export_data:
-                        all_keys.update(row.keys())
-                    fieldnames = sorted(list(all_keys))
-
-                    writer = csv.DictWriter(output, fieldnames=fieldnames, extrasaction='ignore')
+                    writer = csv.DictWriter(output, fieldnames=final_columns, extrasaction='ignore')
                     writer.writeheader()
                     writer.writerows(export_data)
 
@@ -1650,7 +1709,7 @@ def export_data():
                 )
 
             elif export_format == 'excel':
-                # Generate Excel file using openpyxl
+                # Generate Excel file using openpyxl with proper column order
                 try:
                     from openpyxl import Workbook
                     from openpyxl.styles import Font, PatternFill, Alignment
@@ -1661,25 +1720,19 @@ def export_data():
                     ws.title = "Patient Data"
 
                     if export_data:
-                        # Get all unique keys
-                        all_keys = set()
-                        for row in export_data:
-                            all_keys.update(row.keys())
-                        fieldnames = sorted(list(all_keys))
-
-                        # Write headers
+                        # Write headers in proper order
                         header_fill = PatternFill(start_color="3498db", end_color="3498db", fill_type="solid")
                         header_font = Font(bold=True, color="FFFFFF")
 
-                        for col_idx, fieldname in enumerate(fieldnames, 1):
+                        for col_idx, fieldname in enumerate(final_columns, 1):
                             cell = ws.cell(row=1, column=col_idx, value=fieldname)
                             cell.fill = header_fill
                             cell.font = header_font
                             cell.alignment = Alignment(horizontal='center')
 
-                        # Write data
+                        # Write data in proper order
                         for row_idx, data_row in enumerate(export_data, 2):
-                            for col_idx, fieldname in enumerate(fieldnames, 1):
+                            for col_idx, fieldname in enumerate(final_columns, 1):
                                 value = data_row.get(fieldname, '')
                                 # Convert dates to strings
                                 if isinstance(value, (date, datetime)):
@@ -1687,7 +1740,7 @@ def export_data():
                                 ws.cell(row=row_idx, column=col_idx, value=value)
 
                         # Auto-adjust column widths
-                        for col_idx in range(1, len(fieldnames) + 1):
+                        for col_idx in range(1, len(final_columns) + 1):
                             ws.column_dimensions[get_column_letter(col_idx)].width = 15
 
                     # Save to BytesIO
