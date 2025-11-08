@@ -849,7 +849,7 @@ def new_patient():
 
         glaucoma = request.form.get('glaucoma')
         oht_or_pac = request.form.get('oht_or_pac') if glaucoma == '0' else None
-        etiology_glaucoma = request.form.get('etiology_glaucoma') if glaucoma == '1' else None
+        etiology_glaucoma = request.form.get('glaucoma_etiology') if glaucoma == '1' else None
         steroid_responder = request.form.get('steroid_responder')
         pxs = request.form.get('pxs')
         pds = request.form.get('pds')
