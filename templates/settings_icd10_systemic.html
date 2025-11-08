@@ -1,0 +1,481 @@
+<!-- templates/settings_icd10_systemic.html -->
+{% extends "base.html" %}
+
+{% block title %}ICD-10 Systemic Conditions - Settings{% endblock %}
+
+{% block content %}
+<style>
+    .management-container {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+
+    .data-table {
+        background: white;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        overflow: hidden;
+    }
+
+    .table-header {
+        padding: 20px 30px;
+        border-bottom: 2px solid #ecf0f1;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        background: #f8f9fa;
+    }
+
+    .search-bar {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 20px;
+    }
+
+    .search-input {
+        flex: 1;
+        padding: 10px 15px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+    }
+
+    table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+
+    table th {
+        background: #f8f9fa;
+        padding: 15px 20px;
+        text-align: left;
+        font-weight: 600;
+        color: #2c3e50;
+        font-size: 13px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+        border-bottom: 2px solid #ecf0f1;
+    }
+
+    table td {
+        padding: 15px 20px;
+        border-bottom: 1px solid #ecf0f1;
+        font-size: 14px;
+    }
+
+    table tr:hover {
+        background: #f8f9fa;
+    }
+
+    .status-badge {
+        display: inline-block;
+        padding: 4px 10px;
+        border-radius: 4px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .status-active {
+        background: #d4edda;
+        color: #155724;
+    }
+
+    .status-inactive {
+        background: #f8d7da;
+        color: #721c24;
+    }
+
+    .action-buttons {
+        display: flex;
+        gap: 8px;
+    }
+
+    .btn-small {
+        padding: 6px 12px;
+        font-size: 12px;
+        border-radius: 4px;
+        border: none;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+
+    .btn-edit {
+        background: #3498db;
+        color: white;
+    }
+
+    .btn-edit:hover {
+        background: #2980b9;
+    }
+
+    .btn-deactivate {
+        background: #e74c3c;
+        color: white;
+    }
+
+    .btn-deactivate:hover {
+        background: #c0392b;
+    }
+
+    .btn-activate {
+        background: #27ae60;
+        color: white;
+    }
+
+    .btn-activate:hover {
+        background: #229954;
+    }
+
+    .btn-add-new {
+        background: #27ae60;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        font-weight: 500;
+    }
+
+    .btn-add-new:hover {
+        background: #229954;
+    }
+
+    /* Modal styles */
+    .modal {
+        display: none;
+        position: fixed;
+        z-index: 1000;
+        left: 0;
+        top: 0;
+        width: 100%;
+        height: 100%;
+        background-color: rgba(0,0,0,0.5);
+    }
+
+    .modal.active {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    .modal-content {
+        background: white;
+        padding: 30px;
+        border-radius: 8px;
+        width: 90%;
+        max-width: 600px;
+        max-height: 80vh;
+        overflow-y: auto;
+    }
+
+    .modal-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #ecf0f1;
+    }
+
+    .modal-title {
+        font-size: 20px;
+        color: #2c3e50;
+        font-weight: 600;
+    }
+
+    .close-modal {
+        background: none;
+        border: none;
+        font-size: 24px;
+        color: #7f8c8d;
+        cursor: pointer;
+    }
+
+    .close-modal:hover {
+        color: #2c3e50;
+    }
+
+    .modal-form {
+        display: flex;
+        flex-direction: column;
+        gap: 15px;
+    }
+
+    .modal-buttons {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 1px solid #ecf0f1;
+    }
+
+    .category-badge {
+        display: inline-block;
+        background: #fff3e0;
+        color: #e65100;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 11px;
+        font-weight: 600;
+    }
+</style>
+
+<div class="management-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <h2>Manage ICD-10 Systemic Conditions</h2>
+        <div style="display: flex; gap: 10px;">
+            <a href="{{ url_for('settings') }}" class="btn btn-secondary">Back to Settings</a>
+        </div>
+    </div>
+
+    <div class="search-bar">
+        <input type="text" class="search-input" id="searchInput" placeholder="Search by code or description..." onkeyup="filterTable()">
+    </div>
+
+    <div class="data-table">
+        <div class="table-header">
+            <h3 style="margin: 0;">ICD-10 Systemic Codes ({{ codes|length }} total)</h3>
+            <button onclick="openNewModal()" class="btn-add-new">+ Add New Code</button>
+        </div>
+
+        {% if codes %}
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th>Code</th>
+                    <th>Description</th>
+                    <th>Category</th>
+                    <th>Status</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for code in codes %}
+                <tr>
+                    <td><strong>{{ code.code }}</strong></td>
+                    <td>{{ code.description }}</td>
+                    <td>
+                        {% if code.category %}
+                        <span class="category-badge">{{ code.category }}</span>
+                        {% else %}
+                        -
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if code.active %}
+                        <span class="status-badge status-active">Active</span>
+                        {% else %}
+                        <span class="status-badge status-inactive">Inactive</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="action-buttons">
+                            <button onclick='editCode({{ code|tojson }})' class="btn-small btn-edit">Edit</button>
+                            {% if code.active %}
+                            <button onclick="toggleStatus({{ code.id }}, false)" class="btn-small btn-deactivate">Deactivate</button>
+                            {% else %}
+                            <button onclick="toggleStatus({{ code.id }}, true)" class="btn-small btn-activate">Activate</button>
+                            {% endif %}
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+        {% else %}
+        <div style="text-align: center; padding: 60px 20px; color: #7f8c8d;">
+            <p>No ICD-10 systemic codes found.</p>
+        </div>
+        {% endif %}
+    </div>
+</div>
+
+<!-- New Code Modal -->
+<div id="newModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Add New ICD-10 Systemic Code</h3>
+            <button class="close-modal" onclick="closeModal('newModal')">&times;</button>
+        </div>
+        <form id="newForm" class="modal-form" onsubmit="createCode(event)">
+            <div class="form-group">
+                <label for="new_code">Code *</label>
+                <input type="text" id="new_code" name="code" required>
+            </div>
+            <div class="form-group">
+                <label for="new_description">Description *</label>
+                <textarea id="new_description" name="description" rows="3" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="new_category">Category</label>
+                <input type="text" id="new_category" name="category" placeholder="e.g., Cardiovascular, Endocrine, Neurological">
+            </div>
+            <div class="modal-buttons">
+                <button type="button" onclick="closeModal('newModal')" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-success">Create Code</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<!-- Edit Code Modal -->
+<div id="editModal" class="modal">
+    <div class="modal-content">
+        <div class="modal-header">
+            <h3 class="modal-title">Edit ICD-10 Systemic Code</h3>
+            <button class="close-modal" onclick="closeModal('editModal')">&times;</button>
+        </div>
+        <form id="editForm" class="modal-form" onsubmit="updateCode(event)">
+            <input type="hidden" id="edit_id" name="id">
+            <div class="form-group">
+                <label for="edit_code">Code *</label>
+                <input type="text" id="edit_code" name="code" readonly style="background: #f8f9fa;">
+            </div>
+            <div class="form-group">
+                <label for="edit_description">Description *</label>
+                <textarea id="edit_description" name="description" rows="3" required></textarea>
+            </div>
+            <div class="form-group">
+                <label for="edit_category">Category</label>
+                <input type="text" id="edit_category" name="category">
+            </div>
+            <div class="modal-buttons">
+                <button type="button" onclick="closeModal('editModal')" class="btn btn-secondary">Cancel</button>
+                <button type="submit" class="btn btn-primary">Update Code</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function filterTable() {
+    const input = document.getElementById('searchInput');
+    const filter = input.value.toUpperCase();
+    const table = document.getElementById('dataTable');
+    const tr = table.getElementsByTagName('tr');
+
+    for (let i = 1; i < tr.length; i++) {
+        const tdCode = tr[i].getElementsByTagName('td')[0];
+        const tdDesc = tr[i].getElementsByTagName('td')[1];
+        if (tdCode || tdDesc) {
+            const txtValueCode = tdCode.textContent || tdCode.innerText;
+            const txtValueDesc = tdDesc.textContent || tdDesc.innerText;
+            if (txtValueCode.toUpperCase().indexOf(filter) > -1 || txtValueDesc.toUpperCase().indexOf(filter) > -1) {
+                tr[i].style.display = '';
+            } else {
+                tr[i].style.display = 'none';
+            }
+        }
+    }
+}
+
+function openNewModal() {
+    document.getElementById('newForm').reset();
+    document.getElementById('newModal').classList.add('active');
+}
+
+function editCode(code) {
+    document.getElementById('edit_id').value = code.id;
+    document.getElementById('edit_code').value = code.code;
+    document.getElementById('edit_description').value = code.description;
+    document.getElementById('edit_category').value = code.category || '';
+    document.getElementById('editModal').classList.add('active');
+}
+
+function closeModal(modalId) {
+    document.getElementById(modalId).classList.remove('active');
+}
+
+async function createCode(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const data = {
+        code: formData.get('code'),
+        description: formData.get('description'),
+        category: formData.get('category'),
+        active: true
+    };
+
+    try {
+        const response = await fetch('/api/icd10-systemic', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            alert('Systemic code created successfully!');
+            window.location.reload();
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error creating code: ' + error.message);
+    }
+}
+
+async function updateCode(event) {
+    event.preventDefault();
+    const formData = new FormData(event.target);
+    const data = {
+        id: parseInt(formData.get('id')),
+        description: formData.get('description'),
+        category: formData.get('category'),
+        active: true
+    };
+
+    try {
+        const response = await fetch('/api/icd10-systemic', {
+            method: 'PUT',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        });
+
+        if (response.ok) {
+            alert('Systemic code updated successfully!');
+            window.location.reload();
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error updating code: ' + error.message);
+    }
+}
+
+async function toggleStatus(id, newStatus) {
+    if (!confirm(`Are you sure you want to ${newStatus ? 'activate' : 'deactivate'} this code?`)) {
+        return;
+    }
+
+    try {
+        const response = await fetch('/api/icd10-systemic', {
+            method: newStatus ? 'PUT' : 'DELETE',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ id: id, active: newStatus })
+        });
+
+        if (response.ok) {
+            alert(`Code ${newStatus ? 'activated' : 'deactivated'} successfully!`);
+            window.location.reload();
+        } else {
+            const error = await response.json();
+            alert('Error: ' + (error.error || 'Unknown error'));
+        }
+    } catch (error) {
+        alert('Error changing status: ' + error.message);
+    }
+}
+
+// Close modal when clicking outside
+window.onclick = function(event) {
+    if (event.target.classList.contains('modal')) {
+        event.target.classList.remove('active');
+    }
+}
+</script>
+
+{% endblock %}
