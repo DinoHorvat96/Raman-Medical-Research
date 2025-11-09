@@ -296,7 +296,7 @@ def init_database():
             cur.execute('''
                 INSERT INTO users (username, password_hash, email, role)
                 VALUES (%s, %s, %s, %s)
-            ''', ('Admin', admin_password, 'None', 'Administrator'))
+            ''', ('Admin', admin_password, '', 'Administrator'))
             conn.commit()
             print("✓ Default admin user created (username: Admin, password: admin123)")
             print("  ⚠️  IMPORTANT: Change the admin password after first login!")
@@ -1938,14 +1938,10 @@ def user_management():
         cur.execute("SELECT COUNT(*) as count FROM users WHERE role = 'Staff'")
         staff = cur.fetchone()['count']
 
-        cur.execute("SELECT COUNT(*) as count FROM users WHERE role = 'Patient'")
-        patients = cur.fetchone()['count']
-
         stats = {
             'total_users': total_users,
             'administrators': administrators,
-            'staff': staff,
-            'patients': patients
+            'staff': staff
         }
 
         cur.close()
