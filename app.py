@@ -581,6 +581,276 @@ def check_patient_id_exists(patient_id):
         return False
 
 
+def build_filter_clause(request_form):
+    """
+    Build WHERE clause and parameters for filtering patients based on form data
+
+    Returns:
+        tuple: (where_clause, params_list)
+            where_clause: SQL WHERE conditions as string
+            params_list: List of parameter values for parameterized query
+    """
+    where_clauses = []
+    params = []
+
+    # ============================================================================
+    # MAIN OCULAR CONDITIONS FILTERS
+    # ============================================================================
+
+    # Glaucoma filter
+    glaucoma_filter = request_form.get('filter_glaucoma', '')
+    if glaucoma_filter:
+        if glaucoma_filter == 'all':
+            # Include all patients (no filter needed, just documenting)
+            pass
+        elif glaucoma_filter == '0':
+            where_clauses.append('oc.glaucoma = %s')
+            params.append('0')  # FIXED: String instead of integer
+        elif glaucoma_filter == '1':
+            where_clauses.append('oc.glaucoma = %s')
+            params.append('1')  # FIXED: String instead of integer
+        elif glaucoma_filter == 'ND':
+            where_clauses.append("(oc.glaucoma IS NULL OR oc.glaucoma = 'ND')")
+        elif glaucoma_filter == 'not_0_not_nd':
+            where_clauses.append("(oc.glaucoma IS NOT NULL AND oc.glaucoma != 'ND' AND oc.glaucoma != '0')")
+
+    # Diabetic Retinopathy filter
+    dr_filter = request_form.get('filter_diabetic_retinopathy', '')
+    if dr_filter:
+        if dr_filter == 'all':
+            pass
+        elif dr_filter == '0':
+            where_clauses.append('oc.diabetic_retinopathy = %s')
+            params.append('0')  # FIXED: String instead of integer
+        elif dr_filter == '1':
+            where_clauses.append('oc.diabetic_retinopathy = %s')
+            params.append('1')  # FIXED: String instead of integer
+        elif dr_filter == 'ND':
+            where_clauses.append("(oc.diabetic_retinopathy IS NULL OR oc.diabetic_retinopathy = 'ND')")
+        elif dr_filter == 'not_0_not_nd':
+            where_clauses.append(
+                "(oc.diabetic_retinopathy IS NOT NULL AND oc.diabetic_retinopathy != 'ND' AND oc.diabetic_retinopathy != '0')")
+
+    # Lens Status filter
+    lens_filter = request_form.get('filter_lens_status', '')
+    if lens_filter:
+        if lens_filter == 'all':
+            pass
+        elif lens_filter == 'ND':
+            where_clauses.append("(oc.lens_status IS NULL OR oc.lens_status = 'ND')")
+        elif lens_filter in ['Phakic', 'Pseudophakic', 'Aphakic']:
+            where_clauses.append('oc.lens_status = %s')
+            params.append(lens_filter)
+
+    # Macular Edema filter
+    me_filter = request_form.get('filter_macular_edema', '')
+    if me_filter:
+        if me_filter == 'all':
+            pass
+        elif me_filter == '0':
+            where_clauses.append('oc.macular_edema = %s')
+            params.append('0')  # FIXED: String instead of integer
+        elif me_filter == '1':
+            where_clauses.append('oc.macular_edema = %s')
+            params.append('1')  # FIXED: String instead of integer
+        elif me_filter == 'ND':
+            where_clauses.append("(oc.macular_edema IS NULL OR oc.macular_edema = 'ND')")
+        elif me_filter == 'not_0_not_nd':
+            where_clauses.append(
+                "(oc.macular_edema IS NOT NULL AND oc.macular_edema != 'ND' AND oc.macular_edema != '0')")
+
+    # Macular Degeneration filter
+    md_filter = request_form.get('filter_macular_degeneration', '')
+    if md_filter:
+        if md_filter == 'all':
+            pass
+        elif md_filter == '0':
+            where_clauses.append('oc.macular_degeneration_dystrophy = %s')
+            params.append('0')  # FIXED: String instead of integer
+        elif md_filter == '1':
+            where_clauses.append('oc.macular_degeneration_dystrophy = %s')
+            params.append('1')  # FIXED: String instead of integer
+        elif md_filter == 'ND':
+            where_clauses.append(
+                "(oc.macular_degeneration_dystrophy IS NULL OR oc.macular_degeneration_dystrophy = 'ND')")
+        elif md_filter == 'not_0_not_nd':
+            where_clauses.append(
+                "(oc.macular_degeneration_dystrophy IS NOT NULL AND oc.macular_degeneration_dystrophy != 'ND' AND oc.macular_degeneration_dystrophy != '0')")
+
+    # Epiretinal Membrane filter
+    erm_filter = request_form.get('filter_epiretinal_membrane', '')
+    if erm_filter:
+        if erm_filter == 'all':
+            pass
+        elif erm_filter == '0':
+            where_clauses.append('oc.epiretinal_membrane = %s')
+            params.append('0')  # FIXED: String instead of integer
+        elif erm_filter == '1':
+            where_clauses.append('oc.epiretinal_membrane = %s')
+            params.append('1')  # FIXED: String instead of integer
+        elif erm_filter == 'ND':
+            where_clauses.append("(oc.epiretinal_membrane IS NULL OR oc.epiretinal_membrane = 'ND')")
+        elif erm_filter == 'not_0_not_nd':
+            where_clauses.append(
+                "(oc.epiretinal_membrane IS NOT NULL AND oc.epiretinal_membrane != 'ND' AND oc.epiretinal_membrane != '0')")
+
+    # ============================================================================
+    # REPEATABLE CATEGORY FILTERS (Other Conditions, Surgeries, Medications)
+    # ============================================================================
+
+    # Other Ocular Conditions filter
+    other_ocular_filter = request_form.get('filter_other_ocular_mode', '')
+    if other_ocular_filter:
+        if other_ocular_filter == 'all':
+            # Patient has at least one other ocular condition
+            where_clauses.append('''
+                EXISTS (
+                    SELECT 1 FROM other_ocular_conditions ooc 
+                    WHERE ooc.patient_id = ps.patient_id
+                )
+            ''')
+        elif other_ocular_filter == '0':
+            # Patient has no other ocular conditions
+            where_clauses.append('''
+                NOT EXISTS (
+                    SELECT 1 FROM other_ocular_conditions ooc 
+                    WHERE ooc.patient_id = ps.patient_id
+                )
+            ''')
+        elif other_ocular_filter == 'ND':
+            # Typically ND for repeatable categories means no data
+            where_clauses.append('''
+                NOT EXISTS (
+                    SELECT 1 FROM other_ocular_conditions ooc 
+                    WHERE ooc.patient_id = ps.patient_id
+                )
+            ''')
+        elif other_ocular_filter == 'not_0_not_nd':
+            # Patient has at least one condition
+            where_clauses.append('''
+                EXISTS (
+                    SELECT 1 FROM other_ocular_conditions ooc 
+                    WHERE ooc.patient_id = ps.patient_id
+                )
+            ''')
+
+    # Surgeries filter
+    surgeries_filter = request_form.get('filter_surgeries_mode', '')
+    if surgeries_filter:
+        if surgeries_filter == 'all':
+            # Patient has at least one surgery
+            where_clauses.append('''
+                EXISTS (
+                    SELECT 1 FROM previous_ocular_surgeries pos 
+                    WHERE pos.patient_id = ps.patient_id
+                )
+            ''')
+        elif surgeries_filter == '0':
+            # Patient has no surgeries
+            where_clauses.append('''
+                NOT EXISTS (
+                    SELECT 1 FROM previous_ocular_surgeries pos 
+                    WHERE pos.patient_id = ps.patient_id
+                )
+            ''')
+        elif surgeries_filter == 'ND':
+            # No surgeries
+            where_clauses.append('''
+                NOT EXISTS (
+                    SELECT 1 FROM previous_ocular_surgeries pos 
+                    WHERE pos.patient_id = ps.patient_id
+                )
+            ''')
+        elif surgeries_filter == 'not_0_not_nd':
+            # Patient has at least one surgery
+            where_clauses.append('''
+                EXISTS (
+                    SELECT 1 FROM previous_ocular_surgeries pos 
+                    WHERE pos.patient_id = ps.patient_id
+                )
+            ''')
+
+    # Ocular Medications filter
+    ocular_meds_filter = request_form.get('filter_ocular_meds_mode', '')
+    if ocular_meds_filter:
+        if ocular_meds_filter == 'all':
+            # Patient has at least one ocular medication
+            where_clauses.append('''
+                EXISTS (
+                    SELECT 1 FROM ocular_medications om 
+                    WHERE om.patient_id = ps.patient_id
+                )
+            ''')
+        elif ocular_meds_filter == '0':
+            # Patient has no ocular medications
+            where_clauses.append('''
+                NOT EXISTS (
+                    SELECT 1 FROM ocular_medications om 
+                    WHERE om.patient_id = ps.patient_id
+                )
+            ''')
+        elif ocular_meds_filter == 'ND':
+            # No ocular medications
+            where_clauses.append('''
+                NOT EXISTS (
+                    SELECT 1 FROM ocular_medications om 
+                    WHERE om.patient_id = ps.patient_id
+                )
+            ''')
+        elif ocular_meds_filter == 'not_0_not_nd':
+            # Patient has at least one ocular medication
+            where_clauses.append('''
+                EXISTS (
+                    SELECT 1 FROM ocular_medications om 
+                    WHERE om.patient_id = ps.patient_id
+                )
+            ''')
+
+    # Systemic Medications filter
+    systemic_meds_filter = request_form.get('filter_systemic_meds_mode', '')
+    if systemic_meds_filter:
+        if systemic_meds_filter == 'all':
+            # Patient has at least one systemic medication
+            where_clauses.append('''
+                EXISTS (
+                    SELECT 1 FROM systemic_medications sm 
+                    WHERE sm.patient_id = ps.patient_id
+                )
+            ''')
+        elif systemic_meds_filter == '0':
+            # Patient has no systemic medications
+            where_clauses.append('''
+                NOT EXISTS (
+                    SELECT 1 FROM systemic_medications sm 
+                    WHERE sm.patient_id = ps.patient_id
+                )
+            ''')
+        elif systemic_meds_filter == 'ND':
+            # No systemic medications
+            where_clauses.append('''
+                NOT EXISTS (
+                    SELECT 1 FROM systemic_medications sm 
+                    WHERE sm.patient_id = ps.patient_id
+                )
+            ''')
+        elif systemic_meds_filter == 'not_0_not_nd':
+            # Patient has at least one systemic medication
+            where_clauses.append('''
+                EXISTS (
+                    SELECT 1 FROM systemic_medications sm 
+                    WHERE sm.patient_id = ps.patient_id
+                )
+            ''')
+
+    # Build final WHERE clause
+    if where_clauses:
+        where_clause = ' AND ' + ' AND '.join(where_clauses)
+    else:
+        where_clause = ''
+
+    return where_clause, params
+
+
 # Routes
 
 @app.route('/')
@@ -1381,11 +1651,12 @@ def edit_patient(patient_id):
 @app.route('/export_data', methods=['GET', 'POST'])
 @login_required
 def export_data():
-    """Export statistical data with role-based access and proper column ordering"""
+    """Export statistical data with BINARY COLUMNS - each medication/condition/surgery gets its own column"""
     conn = get_db_connection()
     if not conn:
         flash('Database connection error', 'error')
-        return render_template('export_data.html', stats={})
+        return render_template('export_data.html',
+                               stats={'total_patients': 0, 'gender': {'M': 0, 'F': 0}, 'age_distribution': []})
 
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
@@ -1401,7 +1672,9 @@ def export_data():
             GROUP BY sex
         ''')
         gender_stats = cur.fetchall()
-        gender = {row['sex']: row['count'] for row in gender_stats}
+        gender = {'M': 0, 'F': 0}
+        for row in gender_stats:
+            gender[row['sex']] = row['count']
 
         # Age distribution
         cur.execute('''
@@ -1450,7 +1723,65 @@ def export_data():
             include_systemic = 'include_systemic' in request.form
             include_medications = 'include_medications' in request.form
 
-            # Build the main query - with proper column ordering
+            # ============================================================
+            # STEP 1: Query all reference data (including inactive items used by any patient)
+            # ============================================================
+
+            # Get all medications (active OR used by patients)
+            cur.execute('''
+                SELECT DISTINCT generic_name
+                FROM (
+                    SELECT generic_name FROM medications WHERE active = TRUE
+                    UNION
+                    SELECT DISTINCT generic_name FROM ocular_medications
+                    UNION
+                    SELECT DISTINCT generic_name FROM systemic_medications
+                ) AS all_meds
+                ORDER BY generic_name
+            ''')
+            all_medications = [row['generic_name'] for row in cur.fetchall()]
+
+            # Get all ocular ICD-10 codes (active OR used by patients)
+            cur.execute('''
+                SELECT DISTINCT code
+                FROM (
+                    SELECT code FROM icd10_ocular_conditions WHERE active = TRUE
+                    UNION
+                    SELECT DISTINCT icd10_code AS code FROM other_ocular_conditions
+                ) AS all_codes
+                ORDER BY code
+            ''')
+            all_ocular_codes = [row['code'] for row in cur.fetchall()]
+
+            # Get all systemic ICD-10 codes (active OR used by patients)
+            cur.execute('''
+                SELECT DISTINCT code
+                FROM (
+                    SELECT code FROM icd10_systemic_conditions WHERE active = TRUE
+                    UNION
+                    SELECT DISTINCT icd10_code AS code FROM systemic_conditions
+                ) AS all_codes
+                ORDER BY code
+            ''')
+            all_systemic_codes = [row['code'] for row in cur.fetchall()]
+
+            # Get all surgery codes (active OR used by patients)
+            # FIXED: surgeries table uses 'code' not 'surgery_code'
+            cur.execute('''
+                SELECT DISTINCT code
+                FROM (
+                    SELECT code FROM surgeries WHERE active = TRUE
+                    UNION
+                    SELECT DISTINCT surgery_code AS code FROM previous_ocular_surgeries
+                ) AS all_surgeries
+                ORDER BY code
+            ''')
+            all_surgeries = [row['code'] for row in cur.fetchall()]
+
+            # ============================================================
+            # STEP 2: Build base query for patients
+            # ============================================================
+
             if data_type == 'sensitive' and session.get('role') == 'Administrator':
                 # Sensitive export - includes names and MBO
                 base_query = '''
@@ -1466,7 +1797,7 @@ def export_data():
                         pst.age
                 '''
             else:
-                # Anonymized export - order matches form layout (excluding sensitive fields)
+                # Anonymized export
                 base_query = '''
                     SELECT 
                         ps.patient_id,
@@ -1476,7 +1807,7 @@ def export_data():
                         pst.age
                 '''
 
-            # Add ocular conditions if requested - in order of appearance in form
+            # Add ocular conditions if requested
             if include_conditions:
                 base_query += ''',
                     oc.lens_status,
@@ -1531,6 +1862,8 @@ def export_data():
             base_query += ' WHERE 1=1'
 
             params = []
+
+            # Add date filters
             if date_from:
                 base_query += ' AND ps.date_of_sample_collection >= %s'
                 params.append(date_from)
@@ -1538,26 +1871,120 @@ def export_data():
                 base_query += ' AND ps.date_of_sample_collection <= %s'
                 params.append(date_to)
 
+            # Add patient filters
+            filter_clause, filter_params = build_filter_clause(request.form)
+            base_query += filter_clause
+            params.extend(filter_params)
+
             base_query += ' ORDER BY ps.patient_id'
 
             cur.execute(base_query, params)
             patients_data = cur.fetchall()
 
-            # Define column order - this ensures consistent ordering in exports
+            # ============================================================
+            # STEP 3: Preload all patient-related data for performance
+            # ============================================================
+
+            patient_ids = [p['patient_id'] for p in patients_data]
+
+            # Preload other ocular conditions
+            patient_ocular_conditions = {}
+            if include_other_conditions and patient_ids:
+                cur.execute('''
+                    SELECT patient_id, icd10_code, eye 
+                    FROM other_ocular_conditions 
+                    WHERE patient_id = ANY(%s)
+                ''', (patient_ids,))
+                for row in cur.fetchall():
+                    if row['patient_id'] not in patient_ocular_conditions:
+                        patient_ocular_conditions[row['patient_id']] = []
+                    patient_ocular_conditions[row['patient_id']].append(row)
+
+            # Preload surgeries
+            patient_surgeries = {}
+            if include_surgeries and patient_ids:
+                cur.execute('''
+                    SELECT patient_id, surgery_code, eye 
+                    FROM previous_ocular_surgeries 
+                    WHERE patient_id = ANY(%s)
+                ''', (patient_ids,))
+                for row in cur.fetchall():
+                    if row['patient_id'] not in patient_surgeries:
+                        patient_surgeries[row['patient_id']] = []
+                    patient_surgeries[row['patient_id']].append(row)
+
+            # Preload systemic conditions
+            patient_systemic = {}
+            if include_systemic and patient_ids:
+                cur.execute('''
+                    SELECT patient_id, icd10_code 
+                    FROM systemic_conditions 
+                    WHERE patient_id = ANY(%s)
+                ''', (patient_ids,))
+                for row in cur.fetchall():
+                    if row['patient_id'] not in patient_systemic:
+                        patient_systemic[row['patient_id']] = []
+                    patient_systemic[row['patient_id']].append(row)
+
+            # Preload ocular medications
+            patient_ocular_meds = {}
+            if include_medications and patient_ids:
+                cur.execute('''
+                    SELECT patient_id, generic_name, eye, last_application_days 
+                    FROM ocular_medications 
+                    WHERE patient_id = ANY(%s)
+                ''', (patient_ids,))
+                for row in cur.fetchall():
+                    if row['patient_id'] not in patient_ocular_meds:
+                        patient_ocular_meds[row['patient_id']] = []
+                    patient_ocular_meds[row['patient_id']].append(row)
+
+            # Preload systemic medications
+            patient_systemic_meds = {}
+            if include_medications and patient_ids:
+                cur.execute('''
+                    SELECT patient_id, generic_name, last_application_days 
+                    FROM systemic_medications 
+                    WHERE patient_id = ANY(%s)
+                ''', (patient_ids,))
+                for row in cur.fetchall():
+                    if row['patient_id'] not in patient_systemic_meds:
+                        patient_systemic_meds[row['patient_id']] = []
+                    patient_systemic_meds[row['patient_id']].append(row)
+
+            # ============================================================
+            # STEP 4: Build column headers (BINARY FORMAT)
+            # ============================================================
+
+            # Helper function to make safe column names
+            def make_safe_column_name(name):
+                """Convert any name to safe column name"""
+                safe = str(name).lower()
+                safe = safe.replace(' ', '_')
+                safe = safe.replace('/', '_')
+                safe = safe.replace('-', '_')
+                safe = safe.replace('.', '_')
+                safe = safe.replace('(', '')
+                safe = safe.replace(')', '')
+                safe = safe.replace('+', '_')
+                safe = ''.join(c if c.isalnum() or c == '_' else '' for c in safe)
+                # Ensure doesn't start with number
+                if safe and safe[0].isdigit():
+                    safe = 'x_' + safe
+                return safe
+
+            # Start with base columns
             if data_type == 'sensitive' and session.get('role') == 'Administrator':
-                # Order matching form: ID, Name, MBO, Sex, DOB, DoSC, Eye, Hash, Age, then conditions
-                base_columns = [
+                final_columns = [
                     'patient_id', 'patient_name', 'mbo', 'sex', 'date_of_birth',
                     'date_of_sample_collection', 'eye', 'person_hash', 'age'
                 ]
             else:
-                # Order for anonymized: ID, Hash, Sex, Eye, Age, then conditions
-                base_columns = ['patient_id', 'person_hash', 'sex', 'eye', 'age']
+                final_columns = ['patient_id', 'person_hash', 'sex', 'eye', 'age']
 
-            # Add condition columns in order if included
-            condition_columns = []
+            # Add main condition columns if included
             if include_conditions:
-                condition_columns = [
+                final_columns.extend([
                     'lens_status', 'locs_iii_no', 'locs_iii_nc', 'locs_iii_c', 'locs_iii_p',
                     'iol_type', 'etiology_aphakia', 'glaucoma', 'oht_or_pac', 'etiology_glaucoma',
                     'steroid_responder', 'pxs', 'pds', 'diabetic_retinopathy', 'stage_diabetic_retinopathy',
@@ -1569,126 +1996,120 @@ def export_data():
                     'cause_secondary_erm', 'treatment_status_erm', 'retinal_detachment',
                     'etiology_rd', 'treatment_status_rd', 'pvr', 'vitreous_haemorrhage_opacification',
                     'etiology_vitreous_haemorrhage'
-                ]
+                ])
 
-            # Convert to list of dicts and add dynamic columns
+            # Add binary columns for other ocular conditions
+            if include_other_conditions:
+                for code in all_ocular_codes:
+                    safe_code = make_safe_column_name(code)
+                    final_columns.append(f'other_ocular_{safe_code}')
+                    final_columns.append(f'other_ocular_{safe_code}_eye')
+
+            # Add binary columns for surgeries
+            if include_surgeries:
+                for surgery in all_surgeries:
+                    safe_surgery = make_safe_column_name(surgery)
+                    final_columns.append(f'surgery_{safe_surgery}')
+                    final_columns.append(f'surgery_{safe_surgery}_eye')
+
+            # Add binary columns for systemic conditions
+            if include_systemic:
+                for code in all_systemic_codes:
+                    safe_code = make_safe_column_name(code)
+                    final_columns.append(f'systemic_{safe_code}')
+
+            # Add binary columns for ocular medications
+            if include_medications:
+                for med in all_medications:
+                    safe_med = make_safe_column_name(med)
+                    final_columns.append(f'ocular_med_{safe_med}')
+                    final_columns.append(f'ocular_med_{safe_med}_eye')
+                    final_columns.append(f'ocular_med_{safe_med}_days')
+
+            # Add binary columns for systemic medications
+            if include_medications:
+                for med in all_medications:
+                    safe_med = make_safe_column_name(med)
+                    final_columns.append(f'systemic_med_{safe_med}')
+                    final_columns.append(f'systemic_med_{safe_med}_days')
+
+            # ============================================================
+            # STEP 5: Build export data with binary values
+            # ============================================================
+
             export_data = []
-            dynamic_columns = {
-                'other_conditions': [],
-                'surgeries': [],
-                'systemic': [],
-                'ocular_meds': [],
-                'systemic_meds': []
-            }
 
-            for row in patients_data:
-                patient_dict = dict(row)
+            for patient in patients_data:
+                # Initialize row with all columns set to default values
+                row = {}
 
-                # Add other ocular conditions if requested
+                # Fill base patient data
+                for col in final_columns:
+                    if col in patient:
+                        value = patient[col]
+                        # Convert dates to strings
+                        if isinstance(value, (date, datetime)):
+                            row[col] = value.strftime('%Y-%m-%d')
+                        else:
+                            row[col] = value
+                    elif col.endswith('_eye'):
+                        row[col] = 'ND'
+                    elif col.endswith('_days'):
+                        row[col] = 'ND'
+                    elif col.startswith('other_ocular_') or col.startswith('surgery_') or \
+                            col.startswith('systemic_') or col.startswith('ocular_med_') or \
+                            col.startswith('systemic_med_'):
+                        # Binary columns default to 0
+                        if not col.endswith('_eye') and not col.endswith('_days'):
+                            row[col] = 0
+                        else:
+                            row[col] = 'ND'
+                    else:
+                        row[col] = ''
+
+                # Fill other ocular conditions (BINARY)
                 if include_other_conditions:
-                    cur.execute('''
-                        SELECT icd10_code, eye 
-                        FROM other_ocular_conditions 
-                        WHERE patient_id = %s
-                        ORDER BY id
-                    ''', (row['patient_id'],))
-                    other_conds = cur.fetchall()
+                    for cond in patient_ocular_conditions.get(patient['patient_id'], []):
+                        safe_code = make_safe_column_name(cond['icd10_code'])
+                        row[f'other_ocular_{safe_code}'] = 1
+                        row[f'other_ocular_{safe_code}_eye'] = cond['eye']
 
-                    for idx, cond in enumerate(other_conds, 1):
-                        col_name = f'other_ocular_condition_{idx}'
-                        col_eye = f'other_ocular_condition_{idx}_eye'
-                        patient_dict[col_name] = cond['icd10_code']
-                        patient_dict[col_eye] = cond['eye']
-                        if col_name not in dynamic_columns['other_conditions']:
-                            dynamic_columns['other_conditions'].extend([col_name, col_eye])
-
-                # Add surgeries if requested
+                # Fill surgeries (BINARY)
                 if include_surgeries:
-                    cur.execute('''
-                        SELECT surgery_code, eye 
-                        FROM previous_ocular_surgeries 
-                        WHERE patient_id = %s
-                        ORDER BY id
-                    ''', (row['patient_id'],))
-                    surgeries = cur.fetchall()
+                    for surgery in patient_surgeries.get(patient['patient_id'], []):
+                        safe_surgery = make_safe_column_name(surgery['surgery_code'])
+                        row[f'surgery_{safe_surgery}'] = 1
+                        row[f'surgery_{safe_surgery}_eye'] = surgery['eye']
 
-                    for idx, surgery in enumerate(surgeries, 1):
-                        col_name = f'surgery_{idx}'
-                        col_eye = f'surgery_{idx}_eye'
-                        patient_dict[col_name] = surgery['surgery_code']
-                        patient_dict[col_eye] = surgery['eye']
-                        if col_name not in dynamic_columns['surgeries']:
-                            dynamic_columns['surgeries'].extend([col_name, col_eye])
-
-                # Add systemic conditions if requested
+                # Fill systemic conditions (BINARY)
                 if include_systemic:
-                    cur.execute('''
-                        SELECT icd10_code 
-                        FROM systemic_conditions 
-                        WHERE patient_id = %s
-                        ORDER BY id
-                    ''', (row['patient_id'],))
-                    sys_conds = cur.fetchall()
+                    for cond in patient_systemic.get(patient['patient_id'], []):
+                        safe_code = make_safe_column_name(cond['icd10_code'])
+                        row[f'systemic_{safe_code}'] = 1
 
-                    for idx, cond in enumerate(sys_conds, 1):
-                        col_name = f'systemic_condition_{idx}'
-                        patient_dict[col_name] = cond['icd10_code']
-                        if col_name not in dynamic_columns['systemic']:
-                            dynamic_columns['systemic'].append(col_name)
-
-                # Add medications if requested
+                # Fill ocular medications (BINARY)
                 if include_medications:
-                    # Ocular medications
-                    cur.execute('''
-                        SELECT generic_name, eye, last_application_days 
-                        FROM ocular_medications 
-                        WHERE patient_id = %s
-                        ORDER BY id
-                    ''', (row['patient_id'],))
-                    ocular_meds = cur.fetchall()
+                    for med in patient_ocular_meds.get(patient['patient_id'], []):
+                        safe_med = make_safe_column_name(med['generic_name'])
+                        row[f'ocular_med_{safe_med}'] = 1
+                        row[f'ocular_med_{safe_med}_eye'] = med['eye']
+                        row[f'ocular_med_{safe_med}_days'] = med['last_application_days']
 
-                    for idx, med in enumerate(ocular_meds, 1):
-                        col_name = f'ocular_medication_{idx}'
-                        col_eye = f'ocular_medication_{idx}_eye'
-                        col_days = f'ocular_medication_{idx}_last_app_days'
-                        patient_dict[col_name] = med['generic_name']
-                        patient_dict[col_eye] = med['eye']
-                        patient_dict[col_days] = med['last_application_days']
-                        if col_name not in dynamic_columns['ocular_meds']:
-                            dynamic_columns['ocular_meds'].extend([col_name, col_eye, col_days])
+                # Fill systemic medications (BINARY)
+                if include_medications:
+                    for med in patient_systemic_meds.get(patient['patient_id'], []):
+                        safe_med = make_safe_column_name(med['generic_name'])
+                        row[f'systemic_med_{safe_med}'] = 1
+                        row[f'systemic_med_{safe_med}_days'] = med['last_application_days']
 
-                    # Systemic medications
-                    cur.execute('''
-                        SELECT generic_name, last_application_days 
-                        FROM systemic_medications 
-                        WHERE patient_id = %s
-                        ORDER BY id
-                    ''', (row['patient_id'],))
-                    sys_meds = cur.fetchall()
+                export_data.append(row)
 
-                    for idx, med in enumerate(sys_meds, 1):
-                        col_name = f'systemic_medication_{idx}'
-                        col_days = f'systemic_medication_{idx}_last_app_days'
-                        patient_dict[col_name] = med['generic_name']
-                        patient_dict[col_days] = med['last_application_days']
-                        if col_name not in dynamic_columns['systemic_meds']:
-                            dynamic_columns['systemic_meds'].extend([col_name, col_days])
+            # ============================================================
+            # STEP 6: Generate export file
+            # ============================================================
 
-                export_data.append(patient_dict)
-
-            # Build final column order
-            final_columns = base_columns + condition_columns
-
-            # Add dynamic columns in logical order
-            final_columns.extend(dynamic_columns['other_conditions'])
-            final_columns.extend(dynamic_columns['surgeries'])
-            final_columns.extend(dynamic_columns['systemic'])
-            final_columns.extend(dynamic_columns['ocular_meds'])
-            final_columns.extend(dynamic_columns['systemic_meds'])
-
-            # Generate export file
             if export_format == 'csv':
-                # Generate CSV with proper column order
+                # Generate CSV
                 output = io.StringIO()
                 if export_data:
                     writer = csv.DictWriter(output, fieldnames=final_columns, extrasaction='ignore')
@@ -1701,12 +2122,12 @@ def export_data():
                     output.getvalue(),
                     mimetype='text/csv',
                     headers={
-                        'Content-Disposition': f'attachment; filename=raman_export_{filename_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+                        'Content-Disposition': f'attachment; filename=raman_export_binary_{filename_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
                     }
                 )
 
             elif export_format == 'excel':
-                # Generate Excel file using openpyxl with proper column order
+                # Generate Excel file
                 try:
                     from openpyxl import Workbook
                     from openpyxl.styles import Font, PatternFill, Alignment
@@ -1717,7 +2138,7 @@ def export_data():
                     ws.title = "Patient Data"
 
                     if export_data:
-                        # Write headers in proper order
+                        # Write headers
                         header_fill = PatternFill(start_color="3498db", end_color="3498db", fill_type="solid")
                         header_font = Font(bold=True, color="FFFFFF")
 
@@ -1727,13 +2148,10 @@ def export_data():
                             cell.font = header_font
                             cell.alignment = Alignment(horizontal='center')
 
-                        # Write data in proper order
+                        # Write data
                         for row_idx, data_row in enumerate(export_data, 2):
                             for col_idx, fieldname in enumerate(final_columns, 1):
                                 value = data_row.get(fieldname, '')
-                                # Convert dates to strings
-                                if isinstance(value, (date, datetime)):
-                                    value = value.strftime('%Y-%m-%d')
                                 ws.cell(row=row_idx, column=col_idx, value=value)
 
                         # Auto-adjust column widths
@@ -1751,7 +2169,7 @@ def export_data():
                         excel_output.getvalue(),
                         mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
                         headers={
-                            'Content-Disposition': f'attachment; filename=raman_export_{filename_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
+                            'Content-Disposition': f'attachment; filename=raman_export_binary_{filename_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
                         }
                     )
 
@@ -1767,7 +2185,9 @@ def export_data():
         flash(f'Error with export: {str(e)}', 'error')
         if conn:
             conn.close()
-        return render_template('export_data.html', stats={})
+        # Return proper stats structure even on error
+        return render_template('export_data.html',
+                               stats={'total_patients': 0, 'gender': {'M': 0, 'F': 0}, 'age_distribution': []})
 
 
 # Settings Routes

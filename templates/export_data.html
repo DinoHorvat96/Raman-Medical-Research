@@ -207,6 +207,86 @@
         font-size: 14px;
         line-height: 1.6;
     }
+
+    /* Filtering styles */
+    .filter-section {
+        background: #f8f9fa;
+        border: 1px solid #dee2e6;
+        border-radius: 6px;
+        margin-bottom: 15px;
+        overflow: hidden;
+    }
+
+    .filter-header {
+        padding: 15px 20px;
+        background: #e9ecef;
+        cursor: pointer;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        user-select: none;
+    }
+
+    .filter-header:hover {
+        background: #dee2e6;
+    }
+
+    .filter-header-title {
+        font-weight: 600;
+        color: #2c3e50;
+        font-size: 15px;
+    }
+
+    .filter-toggle {
+        font-size: 18px;
+        color: #6c757d;
+        transition: transform 0.3s;
+    }
+
+    .filter-toggle.expanded {
+        transform: rotate(180deg);
+    }
+
+    .filter-content {
+        padding: 20px;
+        display: none;
+    }
+
+    .filter-content.show {
+        display: block;
+    }
+
+    .filter-field {
+        margin-bottom: 20px;
+    }
+
+    .filter-field-label {
+        font-weight: 500;
+        color: #495057;
+        margin-bottom: 8px;
+        font-size: 14px;
+    }
+
+    .filter-field-select {
+        width: 100%;
+        padding: 8px 12px;
+        border: 1px solid #ced4da;
+        border-radius: 4px;
+        font-size: 14px;
+        background: white;
+    }
+
+    .filter-field-select:focus {
+        outline: none;
+        border-color: #3498db;
+        box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+    }
+
+    .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+        gap: 15px;
+    }
 </style>
 
 <div class="export-container">
@@ -332,6 +412,170 @@
                 </div>
             </div>
 
+            <!-- Patient Filters -->
+            <div class="option-group">
+                <div class="option-title">Patient Filters (Optional)</div>
+                <p style="color: #6c757d; font-size: 13px; margin-bottom: 15px;">
+                    Filter patients based on specific conditions, surgeries, or medications. Leave filters empty to include all patients.
+                </p>
+
+                <!-- Main Ocular Conditions Filters -->
+                <div class="filter-section">
+                    <div class="filter-header" onclick="toggleFilterSection('mainOcularFilters')">
+                        <span class="filter-header-title">Main Ocular Conditions</span>
+                        <span class="filter-toggle" id="mainOcularFilters-toggle">▼</span>
+                    </div>
+                    <div class="filter-content" id="mainOcularFilters">
+                        <div class="filter-grid">
+                            <div class="filter-field">
+                                <div class="filter-field-label">Glaucoma</div>
+                                <select name="filter_glaucoma" class="filter-field-select">
+                                    <option value="">No filter</option>
+                                    <option value="all">All values</option>
+                                    <option value="0">0 (No)</option>
+                                    <option value="1">1 (Yes)</option>
+                                    <option value="ND">ND</option>
+                                    <option value="not_0_not_nd">Not 0, not ND</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-field">
+                                <div class="filter-field-label">Diabetic Retinopathy</div>
+                                <select name="filter_diabetic_retinopathy" class="filter-field-select">
+                                    <option value="">No filter</option>
+                                    <option value="all">All values</option>
+                                    <option value="0">0 (No)</option>
+                                    <option value="1">1 (Yes)</option>
+                                    <option value="ND">ND</option>
+                                    <option value="not_0_not_nd">Not 0, not ND</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-field">
+                                <div class="filter-field-label">Lens Status</div>
+                                <select name="filter_lens_status" class="filter-field-select">
+                                    <option value="">No filter</option>
+                                    <option value="all">All values</option>
+                                    <option value="Phakic">Phakic</option>
+                                    <option value="Pseudophakic">Pseudophakic</option>
+                                    <option value="Aphakic">Aphakic</option>
+                                    <option value="ND">ND</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-field">
+                                <div class="filter-field-label">Macular Edema</div>
+                                <select name="filter_macular_edema" class="filter-field-select">
+                                    <option value="">No filter</option>
+                                    <option value="all">All values</option>
+                                    <option value="0">0 (No)</option>
+                                    <option value="1">1 (Yes)</option>
+                                    <option value="ND">ND</option>
+                                    <option value="not_0_not_nd">Not 0, not ND</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-field">
+                                <div class="filter-field-label">Macular Degeneration/Dystrophy</div>
+                                <select name="filter_macular_degeneration" class="filter-field-select">
+                                    <option value="">No filter</option>
+                                    <option value="all">All values</option>
+                                    <option value="0">0 (No)</option>
+                                    <option value="1">1 (Yes)</option>
+                                    <option value="ND">ND</option>
+                                    <option value="not_0_not_nd">Not 0, not ND</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-field">
+                                <div class="filter-field-label">Epiretinal Membrane</div>
+                                <select name="filter_epiretinal_membrane" class="filter-field-select">
+                                    <option value="">No filter</option>
+                                    <option value="all">All values</option>
+                                    <option value="0">0 (No)</option>
+                                    <option value="1">1 (Yes)</option>
+                                    <option value="ND">ND</option>
+                                    <option value="not_0_not_nd">Not 0, not ND</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Other Ocular Conditions Filters -->
+                <div class="filter-section">
+                    <div class="filter-header" onclick="toggleFilterSection('otherOcularFilters')">
+                        <span class="filter-header-title">Other Ocular Conditions (ICD-10)</span>
+                        <span class="filter-toggle" id="otherOcularFilters-toggle">▼</span>
+                    </div>
+                    <div class="filter-content" id="otherOcularFilters">
+                        <div class="filter-field">
+                            <div class="filter-field-label">Filter by Other Ocular Conditions</div>
+                            <select name="filter_other_ocular_mode" class="filter-field-select">
+                                <option value="">No filter</option>
+                                <option value="all">All values (has any condition)</option>
+                                <option value="0">0 (has no conditions)</option>
+                                <option value="ND">ND</option>
+                                <option value="not_0_not_nd">Not 0, not ND (has at least one condition)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Surgeries Filters -->
+                <div class="filter-section">
+                    <div class="filter-header" onclick="toggleFilterSection('surgeriesFilters')">
+                        <span class="filter-header-title">Previous Surgeries & Laser Treatments</span>
+                        <span class="filter-toggle" id="surgeriesFilters-toggle">▼</span>
+                    </div>
+                    <div class="filter-content" id="surgeriesFilters">
+                        <div class="filter-field">
+                            <div class="filter-field-label">Filter by Surgeries</div>
+                            <select name="filter_surgeries_mode" class="filter-field-select">
+                                <option value="">No filter</option>
+                                <option value="all">All values (has any surgery)</option>
+                                <option value="0">0 (has no surgeries)</option>
+                                <option value="ND">ND</option>
+                                <option value="not_0_not_nd">Not 0, not ND (has at least one surgery)</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Medications Filters -->
+                <div class="filter-section">
+                    <div class="filter-header" onclick="toggleFilterSection('medicationsFilters')">
+                        <span class="filter-header-title">Medications</span>
+                        <span class="filter-toggle" id="medicationsFilters-toggle">▼</span>
+                    </div>
+                    <div class="filter-content" id="medicationsFilters">
+                        <div class="filter-grid">
+                            <div class="filter-field">
+                                <div class="filter-field-label">Filter by Ocular Medications</div>
+                                <select name="filter_ocular_meds_mode" class="filter-field-select">
+                                    <option value="">No filter</option>
+                                    <option value="all">All values (has any medication)</option>
+                                    <option value="0">0 (has no medications)</option>
+                                    <option value="ND">ND</option>
+                                    <option value="not_0_not_nd">Not 0, not ND (has at least one medication)</option>
+                                </select>
+                            </div>
+
+                            <div class="filter-field">
+                                <div class="filter-field-label">Filter by Systemic Medications</div>
+                                <select name="filter_systemic_meds_mode" class="filter-field-select">
+                                    <option value="">No filter</option>
+                                    <option value="all">All values (has any medication)</option>
+                                    <option value="0">0 (has no medications)</option>
+                                    <option value="ND">ND</option>
+                                    <option value="not_0_not_nd">Not 0, not ND (has at least one medication)</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <div class="option-group">
                 <div class="option-title">Date Range (Optional)</div>
                 <div class="form-row">
@@ -358,6 +602,20 @@
 </div>
 
 <script>
+// Toggle filter section visibility
+function toggleFilterSection(sectionId) {
+    const content = document.getElementById(sectionId);
+    const toggle = document.getElementById(sectionId + '-toggle');
+
+    if (content.classList.contains('show')) {
+        content.classList.remove('show');
+        toggle.classList.remove('expanded');
+    } else {
+        content.classList.add('show');
+        toggle.classList.add('expanded');
+    }
+}
+
 document.getElementById('exportForm').addEventListener('submit', function(e) {
     // Show loading indicator
     const button = e.target.querySelector('.btn-export');
