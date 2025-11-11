@@ -1260,10 +1260,10 @@ def new_patient():
 
 # Validate Data / Edit Patient Routes
 
-@app.route('/validate-data')
+@app.route('/validate-data', methods=['GET', 'POST'])
 @staff_or_admin_required
 def validate_data():
-    """Search and list patients for validation"""
+    """Search and list patients for validation with optional filtering"""
     conn = get_db_connection()
     if not conn:
         flash('Database connection error', 'error')
@@ -1272,56 +1272,89 @@ def validate_data():
     try:
         cur = conn.cursor(cursor_factory=RealDictCursor)
 
-        # Get search parameters
+        # Get search parameters (from GET for search, POST for filters)
         search_type = request.args.get('type', 'id')
         search_query = request.args.get('q', '')
 
-        if search_query:
+        # Check if filters are being used (POST request with filters)
+        using_filters = request.method == 'POST' and request.form.get('use_filters') == '1'
+
+        # Base query
+        base_query = '''
+            SELECT ps.patient_id, ps.patient_name, ps.date_of_birth, ps.date_of_sample_collection,
+                   pst.sex, pst.eye
+            FROM patients_sensitive ps
+            JOIN patients_statistical pst ON ps.patient_id = pst.patient_id
+        '''
+
+        params = []
+        where_clauses = []
+
+        if using_filters:
+            # Use the existing build_filter_clause function for filtering
+            # Need to join with ocular_conditions table for filter support
+            base_query = '''
+                SELECT DISTINCT ps.patient_id, ps.patient_name, ps.date_of_birth, 
+                       ps.date_of_sample_collection, pst.sex, pst.eye
+                FROM patients_sensitive ps
+                JOIN patients_statistical pst ON ps.patient_id = pst.patient_id
+                LEFT JOIN ocular_conditions oc ON ps.patient_id = oc.patient_id
+                WHERE 1=1
+            '''
+
+            # Build filter clause using existing function
+            filter_clause, filter_params = build_filter_clause(request.form)
+            base_query += filter_clause
+            params.extend(filter_params)
+
+            # Add search query on top of filters if provided
+            if search_query:
+                if search_type == 'id':
+                    base_query += ' AND CAST(ps.patient_id AS TEXT) LIKE %s'
+                    params.append(f'%{search_query}%')
+                elif search_type == 'name':
+                    base_query += ' AND LOWER(ps.patient_name) LIKE LOWER(%s)'
+                    params.append(f'%{search_query}%')
+                elif search_type == 'mbo':
+                    base_query += ' AND ps.mbo LIKE %s'
+                    params.append(f'%{search_query}%')
+
+            base_query += ' ORDER BY ps.patient_id DESC LIMIT 100'
+
+        elif search_query:
+            # Traditional search without filters
             if search_type == 'id':
-                # Search by patient ID
-                cur.execute('''
-                    SELECT ps.patient_id, ps.patient_name, ps.date_of_birth, ps.date_of_sample_collection,
-                           pst.sex, pst.eye
-                    FROM patients_sensitive ps
-                    JOIN patients_statistical pst ON ps.patient_id = pst.patient_id
+                base_query += '''
                     WHERE CAST(ps.patient_id AS TEXT) LIKE %s
                     ORDER BY ps.patient_id DESC
                     LIMIT 20
-                ''', (f'%{search_query}%',))
+                '''
+                params.append(f'%{search_query}%')
             elif search_type == 'name':
-                # Search by name
-                cur.execute('''
-                    SELECT ps.patient_id, ps.patient_name, ps.date_of_birth, ps.date_of_sample_collection,
-                           pst.sex, pst.eye
-                    FROM patients_sensitive ps
-                    JOIN patients_statistical pst ON ps.patient_id = pst.patient_id
+                base_query += '''
                     WHERE LOWER(ps.patient_name) LIKE LOWER(%s)
                     ORDER BY ps.patient_id DESC
                     LIMIT 20
-                ''', (f'%{search_query}%',))
+                '''
+                params.append(f'%{search_query}%')
             elif search_type == 'mbo':
-                # Search by MBO
-                cur.execute('''
-                    SELECT ps.patient_id, ps.patient_name, ps.date_of_birth, ps.date_of_sample_collection,
-                           pst.sex, pst.eye
-                    FROM patients_sensitive ps
-                    JOIN patients_statistical pst ON ps.patient_id = pst.patient_id
+                base_query += '''
                     WHERE ps.mbo LIKE %s
                     ORDER BY ps.patient_id DESC
                     LIMIT 20
-                ''', (f'%{search_query}%',))
-            patients = cur.fetchall()
+                '''
+                params.append(f'%{search_query}%')
         else:
-            # Show 20 most recent patients if no search query
-            cur.execute('''
-                SELECT ps.patient_id, ps.patient_name, ps.date_of_birth, ps.date_of_sample_collection,
-                       pst.sex, pst.eye
-                FROM patients_sensitive ps
-                JOIN patients_statistical pst ON ps.patient_id = pst.patient_id
-                ORDER BY ps.patient_id DESC
-                LIMIT 20
-            ''')
-            patients = cur.fetchall()
+            # Show 20 most recent patients if no search query or filters
+            base_query += 'ORDER BY ps.patient_id DESC LIMIT 20'
+
+        # Execute query
+        if params:
+            cur.execute(base_query, params)
+        else:
+            cur.execute(base_query)
+
+        patients = cur.fetchall()
 
         cur.close()
         conn.close()
@@ -1329,12 +1362,18 @@ def validate_data():
         return render_template('validate_data.html',
                                patients=patients,
                                search_type=search_type,
-                               search_query=search_query)
+                               search_query=search_query,
+                               using_filters=using_filters,
+                               filters=request.form if using_filters else {})
+
     except Exception as e:
         flash(f'Error searching patients: {str(e)}', 'error')
         if conn:
             conn.close()
-        return render_template('validate_data.html', patients=[])
+        return render_template('validate_data.html',
+                               patients=[],
+                               search_type=search_type,
+                               search_query=search_query)
 
 
 @app.route('/edit-patient/<int:patient_id>', methods=['GET', 'POST'])

@@ -149,6 +149,96 @@
         background: #d5f4e6;
         color: #1e8449;
     }
+
+    /* Filter Section Styles */
+    .filter-toggle {
+        background: #f8f9fa;
+        border: 2px dashed #d1d8e0;
+        border-radius: 8px;
+        padding: 15px 20px;
+        margin-top: 20px;
+        cursor: pointer;
+        transition: all 0.3s;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+    }
+
+    .filter-toggle:hover {
+        background: #e9ecef;
+        border-color: #3498db;
+    }
+
+    .filter-toggle-text {
+        font-weight: 600;
+        color: #2c3e50;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+    }
+
+    .filter-toggle-icon {
+        font-size: 20px;
+        transition: transform 0.3s;
+    }
+
+    .filter-toggle-icon.open {
+        transform: rotate(180deg);
+    }
+
+    .filter-section {
+        display: none;
+        background: #f8f9fa;
+        border: 2px solid #d1d8e0;
+        border-top: none;
+        border-radius: 0 0 8px 8px;
+        padding: 25px;
+        margin-top: -8px;
+    }
+
+    .filter-section.open {
+        display: block;
+    }
+
+    .filter-category {
+        background: white;
+        padding: 20px;
+        border-radius: 6px;
+        margin-bottom: 15px;
+    }
+
+    .filter-category h4 {
+        color: #2c3e50;
+        font-size: 14px;
+        font-weight: 600;
+        margin-bottom: 15px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #ecf0f1;
+    }
+
+    .filter-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+        gap: 15px;
+    }
+
+    .filter-buttons {
+        display: flex;
+        gap: 10px;
+        justify-content: flex-end;
+        margin-top: 20px;
+        padding-top: 20px;
+        border-top: 2px solid #d1d8e0;
+    }
+
+    .active-filters-badge {
+        background: #3498db;
+        color: white;
+        padding: 2px 8px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 600;
+    }
 </style>
 
 <div class="search-box">
@@ -163,7 +253,7 @@
                 onclick="setSearchType('mbo')">MBO</button>
     </div>
 
-    <form method="GET" action="{{ url_for('validate_data') }}" class="search-form">
+    <form method="GET" action="{{ url_for('validate_data') }}" class="search-form" id="searchForm">
         <div class="form-group" style="margin: 0;">
             <select name="type" id="search_type" class="form-control" style="height: 44px;">
                 <option value="id" {% if search_type == 'id' or not search_type %}selected{% endif %}>Patient ID</option>
@@ -188,10 +278,162 @@
     <p style="color: #7f8c8d; font-size: 13px; margin-top: 15px; margin-bottom: 0;">
         {% if search_query %}
             Showing results for "{{ search_query }}"
+        {% elif using_filters %}
+            Showing filtered results
         {% else %}
             Showing 20 most recent patients
         {% endif %}
     </p>
+
+    <!-- Toggleable Filter Section -->
+    <div class="filter-toggle" id="filterToggle" onclick="toggleFilters()">
+        <div class="filter-toggle-text">
+            <span>🎯</span>
+            <span>Advanced Filters</span>
+            {% if using_filters %}
+            <span class="active-filters-badge">Active</span>
+            {% endif %}
+        </div>
+        <span class="filter-toggle-icon {% if using_filters %}open{% endif %}" id="filterIcon">▼</span>
+    </div>
+
+    <form method="POST" action="{{ url_for('validate_data') }}" id="filterForm">
+        <input type="hidden" name="use_filters" value="1">
+        <!-- Preserve search query when using filters -->
+        <input type="hidden" name="search_type" value="{{ search_type }}">
+        <input type="hidden" name="search_query" value="{{ search_query }}">
+
+        <div class="filter-section {% if using_filters %}open{% endif %}" id="filterSection">
+
+            <!-- Main Ocular Conditions -->
+            <div class="filter-category">
+                <h4>Main Ocular Conditions</h4>
+                <div class="filter-grid">
+                    <div class="form-group">
+                        <label>Glaucoma</label>
+                        <select name="filter_glaucoma" class="form-control">
+                            <option value="">All values</option>
+                            <option value="0" {% if filters.get('filter_glaucoma') == '0' %}selected{% endif %}>0</option>
+                            <option value="1" {% if filters.get('filter_glaucoma') == '1' %}selected{% endif %}>1</option>
+                            <option value="ND" {% if filters.get('filter_glaucoma') == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="not_0_not_nd" {% if filters.get('filter_glaucoma') == 'not_0_not_nd' %}selected{% endif %}>Not 0, not ND</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Diabetic Retinopathy</label>
+                        <select name="filter_diabetic_retinopathy" class="form-control">
+                            <option value="">All values</option>
+                            <option value="0" {% if filters.get('filter_diabetic_retinopathy') == '0' %}selected{% endif %}>0</option>
+                            <option value="1" {% if filters.get('filter_diabetic_retinopathy') == '1' %}selected{% endif %}>1</option>
+                            <option value="ND" {% if filters.get('filter_diabetic_retinopathy') == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="not_0_not_nd" {% if filters.get('filter_diabetic_retinopathy') == 'not_0_not_nd' %}selected{% endif %}>Not 0, not ND</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Lens Status</label>
+                        <select name="filter_lens_status" class="form-control">
+                            <option value="">All values</option>
+                            <option value="Phakic" {% if filters.get('filter_lens_status') == 'Phakic' %}selected{% endif %}>Phakic</option>
+                            <option value="Pseudophakic" {% if filters.get('filter_lens_status') == 'Pseudophakic' %}selected{% endif %}>Pseudophakic</option>
+                            <option value="Aphakic" {% if filters.get('filter_lens_status') == 'Aphakic' %}selected{% endif %}>Aphakic</option>
+                            <option value="ND" {% if filters.get('filter_lens_status') == 'ND' %}selected{% endif %}>ND</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Macular Edema</label>
+                        <select name="filter_macular_edema" class="form-control">
+                            <option value="">All values</option>
+                            <option value="0" {% if filters.get('filter_macular_edema') == '0' %}selected{% endif %}>0</option>
+                            <option value="1" {% if filters.get('filter_macular_edema') == '1' %}selected{% endif %}>1</option>
+                            <option value="ND" {% if filters.get('filter_macular_edema') == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="not_0_not_nd" {% if filters.get('filter_macular_edema') == 'not_0_not_nd' %}selected{% endif %}>Not 0, not ND</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Macular Degeneration</label>
+                        <select name="filter_macular_degeneration" class="form-control">
+                            <option value="">All values</option>
+                            <option value="0" {% if filters.get('filter_macular_degeneration') == '0' %}selected{% endif %}>0</option>
+                            <option value="1" {% if filters.get('filter_macular_degeneration') == '1' %}selected{% endif %}>1</option>
+                            <option value="ND" {% if filters.get('filter_macular_degeneration') == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="not_0_not_nd" {% if filters.get('filter_macular_degeneration') == 'not_0_not_nd' %}selected{% endif %}>Not 0, not ND</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Epiretinal Membrane</label>
+                        <select name="filter_epiretinal_membrane" class="form-control">
+                            <option value="">All values</option>
+                            <option value="0" {% if filters.get('filter_epiretinal_membrane') == '0' %}selected{% endif %}>0</option>
+                            <option value="1" {% if filters.get('filter_epiretinal_membrane') == '1' %}selected{% endif %}>1</option>
+                            <option value="ND" {% if filters.get('filter_epiretinal_membrane') == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="not_0_not_nd" {% if filters.get('filter_epiretinal_membrane') == 'not_0_not_nd' %}selected{% endif %}>Not 0, not ND</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Other Conditions, Surgeries, Medications -->
+            <div class="filter-category">
+                <h4>Other Conditions, Surgeries & Medications</h4>
+                <div class="filter-grid">
+                    <div class="form-group">
+                        <label>Other Ocular Conditions</label>
+                        <select name="filter_other_ocular_mode" class="form-control">
+                            <option value="">All values</option>
+                            <option value="0" {% if filters.get('filter_other_ocular_mode') == '0' %}selected{% endif %}>Has none (0)</option>
+                            <option value="all" {% if filters.get('filter_other_ocular_mode') == 'all' %}selected{% endif %}>Has any</option>
+                            <option value="ND" {% if filters.get('filter_other_ocular_mode') == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="not_0_not_nd" {% if filters.get('filter_other_ocular_mode') == 'not_0_not_nd' %}selected{% endif %}>Not 0, not ND</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Previous Surgeries</label>
+                        <select name="filter_surgeries_mode" class="form-control">
+                            <option value="">All values</option>
+                            <option value="0" {% if filters.get('filter_surgeries_mode') == '0' %}selected{% endif %}>Has none (0)</option>
+                            <option value="all" {% if filters.get('filter_surgeries_mode') == 'all' %}selected{% endif %}>Has any</option>
+                            <option value="ND" {% if filters.get('filter_surgeries_mode') == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="not_0_not_nd" {% if filters.get('filter_surgeries_mode') == 'not_0_not_nd' %}selected{% endif %}>Not 0, not ND</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Ocular Medications</label>
+                        <select name="filter_ocular_meds_mode" class="form-control">
+                            <option value="">All values</option>
+                            <option value="0" {% if filters.get('filter_ocular_meds_mode') == '0' %}selected{% endif %}>Has none (0)</option>
+                            <option value="all" {% if filters.get('filter_ocular_meds_mode') == 'all' %}selected{% endif %}>Has any</option>
+                            <option value="ND" {% if filters.get('filter_ocular_meds_mode') == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="not_0_not_nd" {% if filters.get('filter_ocular_meds_mode') == 'not_0_not_nd' %}selected{% endif %}>Not 0, not ND</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label>Systemic Medications</label>
+                        <select name="filter_systemic_meds_mode" class="form-control">
+                            <option value="">All values</option>
+                            <option value="0" {% if filters.get('filter_systemic_meds_mode') == '0' %}selected{% endif %}>Has none (0)</option>
+                            <option value="all" {% if filters.get('filter_systemic_meds_mode') == 'all' %}selected{% endif %}>Has any</option>
+                            <option value="ND" {% if filters.get('filter_systemic_meds_mode') == 'ND' %}selected{% endif %}>ND</option>
+                            <option value="not_0_not_nd" {% if filters.get('filter_systemic_meds_mode') == 'not_0_not_nd' %}selected{% endif %}>Not 0, not ND</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Filter Buttons -->
+            <div class="filter-buttons">
+                <button type="button" onclick="clearFilters()" class="btn btn-secondary">Clear Filters</button>
+                <button type="submit" class="btn btn-primary">Apply Filters</button>
+            </div>
+        </div>
+    </form>
 </div>
 
 <div class="results-table">
@@ -246,13 +488,13 @@
         <div class="no-results-icon">🔍</div>
         <h3 style="color: #2c3e50; margin-bottom: 10px;">No Patients Found</h3>
         <p style="color: #7f8c8d;">
-            {% if search_query %}
-                Try a different search term or search by a different field.
+            {% if search_query or using_filters %}
+                Try adjusting your search terms or filters.
             {% else %}
                 No patients have been added to the database yet.
             {% endif %}
         </p>
-        {% if not search_query %}
+        {% if not search_query and not using_filters %}
         <a href="{{ url_for('new_patient') }}" class="btn btn-success" style="margin-top: 20px;">
             + Add First Patient
         </a>
@@ -271,6 +513,32 @@ function setSearchType(type) {
     });
     event.target.classList.add('active');
 }
+
+function toggleFilters() {
+    const filterSection = document.getElementById('filterSection');
+    const filterIcon = document.getElementById('filterIcon');
+
+    filterSection.classList.toggle('open');
+    filterIcon.classList.toggle('open');
+}
+
+function clearFilters() {
+    // Reset all select elements in the filter form
+    document.querySelectorAll('#filterForm select').forEach(select => {
+        select.selectedIndex = 0;
+    });
+
+    // Submit the form to clear filters
+    document.getElementById('filterForm').submit();
+}
+
+// Auto-open filters if they're active
+{% if using_filters %}
+window.addEventListener('DOMContentLoaded', function() {
+    document.getElementById('filterSection').classList.add('open');
+    document.getElementById('filterIcon').classList.add('open');
+});
+{% endif %}
 </script>
 
 {% endblock %}
