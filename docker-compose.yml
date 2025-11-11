@@ -2,6 +2,7 @@ services:
   web:
     build: .
     container_name: medical_web
+    command: gunicorn --config gunicorn_config.py app:app
     environment:
       DB_NAME: ${DB_NAME:-raman_research_prod}
       DB_USER: ${DB_USER:-postgres}
@@ -10,14 +11,18 @@ services:
       DB_PORT: ${DB_PORT:-5432}
       SECRET_KEY: ${SECRET_KEY}
       FLASK_ENV: production
-    # Uncomment below if you want direct access to Flask for debugging
-    # ports:
-    #   - "5000:5000"
+    ports:
+      - "5000:5000"
     networks:
       - medical_network
     volumes:
       - .:/app
     restart: unless-stopped
+    healthcheck:
+      test: [ "CMD", "curl", "-f", "http://localhost:5000/health" ]
+      interval: 30s
+      timeout: 3s
+      retries: 3
 
   nginx:
     image: nginx:alpine

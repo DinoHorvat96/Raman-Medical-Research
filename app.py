@@ -2862,6 +2862,20 @@ def api_next_available_patient_id():
         return jsonify({'error': str(e), 'next_id': STARTING_PATIENT_ID}), 500
 
 
+@app.route('/health')
+def health_check():
+    """Health check endpoint"""
+    try:
+        # Test database connection
+        conn = get_db_connection()
+        if conn:
+            conn.close()
+            return {'status': 'healthy'}, 200
+        return {'status': 'unhealthy'}, 503
+    except Exception as e:
+        return {'status': 'unhealthy', 'error': str(e)}, 503
+
+
 # Application Initialization and Startup
 
 if __name__ == '__main__':
