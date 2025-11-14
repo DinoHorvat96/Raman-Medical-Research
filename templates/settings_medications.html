@@ -86,9 +86,9 @@
                         <div class="action-buttons">
                             <button onclick='editMed({{ med|tojson }})' class="btn-small btn-edit">Edit</button>
                             {% if med.active %}
-                            <button onclick="toggleStatus({{ med.id }}, false)" class="btn-small btn-deactivate">Deactivate</button>
+                            <button onclick="toggleStatus({{ med.id }}, false, '', '', '')" class="btn-small btn-deactivate">Deactivate</button>
                             {% else %}
-                            <button onclick="toggleStatus({{ med.id }}, true)" class="btn-small btn-activate">Activate</button>
+                            <button onclick='toggleStatus({{ med.id }}, true, {{ med.trade_name|tojson }}, {{ med.generic_name|tojson }}, {{ med.medication_type|tojson }})' class="btn-small btn-activate">Activate</button>
                             {% endif %}
                         </div>
                     </td>
@@ -262,15 +262,30 @@ async function updateMed(event) {
     }
 }
 
-async function toggleStatus(id, newStatus) {
+async function toggleStatus(id, newStatus, tradeName, genericName, medicationType) {
     if (!confirm(`Are you sure you want to ${newStatus ? 'activate' : 'deactivate'} this medication?`)) {
         return;
     }
     try {
+        let requestData;
+        if (newStatus) {
+            // For activation (PUT), send all required fields
+            requestData = {
+                id: id,
+                trade_name: tradeName,
+                generic_name: genericName,
+                medication_type: medicationType || 'Both',
+                active: true
+            };
+        } else {
+            // For deactivation (DELETE), only send id
+            requestData = { id: id };
+        }
+
         const response = await fetch('/api/medications', {
             method: newStatus ? 'PUT' : 'DELETE',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ id: id, active: newStatus })
+            body: JSON.stringify(requestData)
         });
         if (response.ok) {
             alert(`Medication ${newStatus ? 'activated' : 'deactivated'} successfully!`);

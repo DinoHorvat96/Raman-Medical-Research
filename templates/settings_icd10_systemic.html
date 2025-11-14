@@ -274,9 +274,9 @@
                         <div class="action-buttons">
                             <button onclick='editCode({{ code|tojson }})' class="btn-small btn-edit">Edit</button>
                             {% if code.active %}
-                            <button onclick="toggleStatus({{ code.id }}, false)" class="btn-small btn-deactivate">Deactivate</button>
+                            <button onclick="toggleStatus({{ code.id }}, false, '', '', '')" class="btn-small btn-deactivate">Deactivate</button>
                             {% else %}
-                            <button onclick="toggleStatus({{ code.id }}, true)" class="btn-small btn-activate">Activate</button>
+                            <button onclick='toggleStatus({{ code.id }}, true, {{ code.code|tojson }}, {{ code.description|tojson }}, {{ code.category|tojson }})' class="btn-small btn-activate">Activate</button>
                             {% endif %}
                         </div>
                     </td>
@@ -446,16 +446,30 @@ async function updateCode(event) {
     }
 }
 
-async function toggleStatus(id, newStatus) {
+async function toggleStatus(id, newStatus, code, description, category) {
     if (!confirm(`Are you sure you want to ${newStatus ? 'activate' : 'deactivate'} this code?`)) {
         return;
     }
 
     try {
+        let requestData;
+        if (newStatus) {
+            // For activation (PUT), send all required fields
+            requestData = {
+                id: id,
+                description: description,
+                category: category || '',
+                active: true
+            };
+        } else {
+            // For deactivation (DELETE), only send id
+            requestData = { id: id };
+        }
+
         const response = await fetch('/api/icd10-systemic', {
             method: newStatus ? 'PUT' : 'DELETE',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ id: id, active: newStatus })
+            body: JSON.stringify(requestData)
         });
 
         if (response.ok) {

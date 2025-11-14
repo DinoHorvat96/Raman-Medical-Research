@@ -254,7 +254,7 @@
             <tbody>
                 {% for surgery in surgeries %}
                 <tr>
-                    <td><strong>{{ surgery.surgery_code }}</strong></td>
+                    <td><strong>{{ surgery.code }}</strong></td>
                     <td>{{ surgery.description }}</td>
                     <td>
                         {% if surgery.category %}
@@ -274,9 +274,9 @@
                         <div class="action-buttons">
                             <button onclick='editSurgery({{ surgery|tojson }})' class="btn-small btn-edit">Edit</button>
                             {% if surgery.active %}
-                            <button onclick="toggleStatus({{ surgery.id }}, false)" class="btn-small btn-deactivate">Deactivate</button>
+                            <button onclick="toggleStatus({{ surgery.id }}, false, '', '', '')" class="btn-small btn-deactivate">Deactivate</button>
                             {% else %}
-                            <button onclick="toggleStatus({{ surgery.id }}, true)" class="btn-small btn-activate">Activate</button>
+                            <button onclick='toggleStatus({{ surgery.id }}, true, {{ surgery.code|tojson }}, {{ surgery.description|tojson }}, {{ surgery.category|tojson }})' class="btn-small btn-activate">Activate</button>
                             {% endif %}
                         </div>
                     </td>
@@ -505,16 +505,30 @@ async function updateSurgery(event) {
     }
 }
 
-async function toggleStatus(id, newStatus) {
+async function toggleStatus(id, newStatus, code, description, category) {
     if (!confirm(`Are you sure you want to ${newStatus ? 'activate' : 'deactivate'} this procedure?`)) {
         return;
     }
 
     try {
+        let requestData;
+        if (newStatus) {
+            // For activation (PUT), send all required fields
+            requestData = {
+                id: id,
+                description: description,
+                category: category || '',
+                active: true
+            };
+        } else {
+            // For deactivation (DELETE), only send id
+            requestData = { id: id };
+        }
+
         const response = await fetch('/api/surgeries', {
             method: newStatus ? 'PUT' : 'DELETE',
             headers: {'Content-Type': 'application/json'},
-            body: JSON.stringify({ id: id, active: newStatus })
+            body: JSON.stringify(requestData)
         });
 
         if (response.ok) {
