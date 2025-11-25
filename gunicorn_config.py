@@ -21,11 +21,18 @@ timeout = 15  # Request timeout in seconds (increase for long-running operations
 graceful_timeout = 30  # Time to wait for workers to finish before force kill
 keepalive = 2  # Keep-alive connections
 
+# Preload the application
+preload_app = True
+
 # Logging
 accesslog = "-"  # Log to stdout (Docker will capture)
 errorlog = "-"   # Log errors to stderr
 loglevel = "info"  # Options: debug, info, warning, error, critical
 access_log_format = '%(h)s %(l)s %(u)s %(t)s "%(r)s" %(s)s %(b)s "%(f)s" "%(a)s" %(D)s'
+
+# Make sure Python prints are visible
+capture_output = True
+enable_stdio_inheritance = True
 
 # Process naming
 proc_name = "raman_medical_research"

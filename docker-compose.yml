@@ -11,12 +11,16 @@ services:
       DB_PORT: ${DB_PORT:-5432}
       SECRET_KEY: ${SECRET_KEY}
       FLASK_ENV: production
+      BACKUP_DIR: ${BACKUP_DIR:-/backups}
+      BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-90}
     ports:
       - "5000:5000"
     networks:
       - medical_network
     volumes:
       - .:/app
+      - ./backups:/backups
+      - ./uploads:/app/uploads
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:5000/health" ]

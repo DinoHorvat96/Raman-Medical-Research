@@ -36,6 +36,11 @@
         background: linear-gradient(135deg, #ffffff 0%, #f8f5ff 100%);
     }
 
+    .settings-card.critical {
+        border-left-color: #e74c3c;
+        background: linear-gradient(135deg, #ffffff 0%, #fff5f5 100%);
+    }
+
     .settings-icon {
         font-size: 40px;
         margin-bottom: 15px;
@@ -44,6 +49,10 @@
 
     .settings-card.highlight .settings-icon {
         color: #9b59b6;
+    }
+
+    .settings-card.critical .settings-icon {
+        color: #e74c3c;
     }
 
     .settings-title {
@@ -85,12 +94,20 @@
         color: #9b59b6;
     }
 
+    .settings-card.critical .settings-link {
+        color: #e74c3c;
+    }
+
     .settings-link:hover {
         color: #2980b9;
     }
 
     .settings-card.highlight .settings-link:hover {
         color: #8e44ad;
+    }
+
+    .settings-card.critical .settings-link:hover {
+        color: #c0392b;
     }
 
     .settings-link::after {
@@ -129,6 +146,24 @@
     .section-header:first-of-type {
         margin-top: 0;
     }
+
+    .badge-new {
+        display: inline-block;
+        background: #e74c3c;
+        color: white;
+        padding: 3px 8px;
+        border-radius: 12px;
+        font-size: 11px;
+        font-weight: 600;
+        margin-left: 8px;
+        animation: pulse 2s infinite;
+    }
+
+    @keyframes pulse {
+        0% { opacity: 1; }
+        50% { opacity: 0.7; }
+        100% { opacity: 1; }
+    }
 </style>
 
 <div class="settings-container">
@@ -139,10 +174,10 @@
 
     <div class="info-banner">
         <h3>⚙️ System Settings</h3>
-        <p>Manage reference data, user accounts, and system configuration. All changes here are logged and only affect new entries - existing patient data remains unchanged.</p>
+        <p>Manage reference data, user accounts, backups, and system configuration. All changes here are logged and only affect new entries - existing patient data remains unchanged.</p>
     </div>
 
-    <h3 class="section-header">👥 User & System Management</h3>
+    <h3 class="section-header">💾 System Management</h3>
 
     <div class="settings-grid">
         <div class="settings-card highlight">
@@ -153,17 +188,29 @@
             </div>
             <a href="{{ url_for('user_management') }}" class="settings-link">Manage Users</a>
         </div>
+
+        <div class="settings-card critical">
+            <div class="settings-icon">🔒</div>
+            <div class="settings-title">
+                Backup & Restore
+                <!-- <span class="badge-new">NEW</span> -->
+            </div>
+            <div class="settings-description">
+                Create and restore database backups, schedule automatic backups, and manage backup retention policies. Administrator only.
+            </div>
+            <a href="{{ url_for('settings_backup') }}" class="settings-link">Manage Backups</a>
+        </div>
     </div>
 
     <h3 class="section-header">📚 Reference Data Management</h3>
 
     <div class="settings-grid">
         <div class="settings-card">
-            <div class="settings-icon">🔍</div>
+            <div class="settings-icon">👁️</div>
             <div class="settings-title">ICD-10 Ocular Conditions</div>
             <span class="settings-count">{{ stats.ocular_icd10|default(0) }} codes</span>
             <div class="settings-description">
-                Manage the list of ICD-10 codes for ophthalmic conditions used in patient records.
+                Manage the list of ICD-10 codes for ophthalmic conditions. Includes bulk upload, export, and full delete capabilities.
             </div>
             <a href="{{ url_for('settings_icd10_ocular') }}" class="settings-link">Manage Ocular Codes</a>
         </div>
@@ -173,7 +220,7 @@
             <div class="settings-title">ICD-10 Systemic Conditions</div>
             <span class="settings-count">{{ stats.systemic_icd10|default(0) }} codes</span>
             <div class="settings-description">
-                Manage the list of ICD-10 codes for systemic medical conditions.
+                Manage the list of ICD-10 codes for systemic medical conditions. Includes bulk upload, export, and full delete capabilities.
             </div>
             <a href="{{ url_for('settings_icd10_systemic') }}" class="settings-link">Manage Systemic Codes</a>
         </div>
