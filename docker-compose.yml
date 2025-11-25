@@ -11,7 +11,7 @@ services:
       DB_PORT: ${DB_PORT:-5432}
       SECRET_KEY: ${SECRET_KEY}
       FLASK_ENV: production
-      BACKUP_DIR: ${BACKUP_DIR:-/backups}
+      BACKUP_DIR: ${BACKUP_DIR:-/mnt/medical_backups/raman_backups}
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-90}
     ports:
       - "5000:5000"
@@ -21,6 +21,7 @@ services:
       - .:/app
       - ./backups:/backups
       - ./uploads:/app/uploads
+      - /mnt/medical_backups:/mnt/medical_backups
     restart: unless-stopped
     healthcheck:
       test: [ "CMD", "curl", "-f", "http://localhost:5000/health" ]
