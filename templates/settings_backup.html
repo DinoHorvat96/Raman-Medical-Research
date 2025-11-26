@@ -379,6 +379,29 @@
     input:checked + .slider:before {
         transform: translateX(26px);
     }
+
+    .alert {
+    padding: 15px;
+    margin-bottom: 20px;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    }
+
+    .alert-success {
+        background-color: #d4edda;
+        border-color: #c3e6cb;
+        color: #155724;
+    }
+
+    .alert-warning {
+        background-color: #fff3cd;
+        border-color: #ffeeba;
+        color: #856404;
+    }
+
+    .alert strong {
+        font-weight: 600;
+    }
 </style>
 
 <div class="backup-container">
@@ -443,6 +466,11 @@
             <button onclick="createBackup()" class="btn-backup">🔒 Create Backup Now</button>
             <button onclick="saveConfiguration()" class="btn-save">💾 Save Configuration</button>
         </div>
+    </div>
+
+    <!-- Drive Status Section (for external drives) -->
+    <div id="driveStatus" style="margin-top: 30px;">
+        <!-- This will be populated by JavaScript -->
     </div>
 
     <!-- Existing Backups Section -->
@@ -694,6 +722,35 @@ window.onclick = function(event) {
         event.target.classList.remove('active');
     }
 }
+
+    async function checkBackupDrive() {
+    try {
+        const response = await fetch('/api/backup-drive-status');
+        const data = await response.json();
+
+        if (data.available) {
+            document.getElementById('driveStatus').innerHTML = `
+                <div class="alert alert-success">
+                    <strong>✓ External Drive Connected</strong><br>
+                    Free Space: ${data.free_space_gb} GB<br>
+                    Mount Point: ${data.mount_point}
+                </div>
+            `;
+        } else {
+            document.getElementById('driveStatus').innerHTML = `
+                <div class="alert alert-warning">
+                    <strong>⚠ No External Drive</strong><br>
+                    Using local storage for backups
+                </div>
+            `;
+        }
+    } catch (error) {
+        console.error('Error checking drive status:', error);
+    }
+}
+
+// Call on page load
+window.addEventListener('load', checkBackupDrive);
 </script>
 
 {% endblock %}

@@ -2955,14 +2955,32 @@ def settings_backup():
 @app.route('/api/browse-directory', methods=['POST'])
 @admin_required
 def browse_directory():
-    """Browse server directory structure"""
+    """Browse server directory structure with extended support for external drives"""
     current_path = request.json.get('path', '/')
-
-    # Security: Restrict to certain directories
-    allowed_roots = ['/backups', '/mnt', '/home', '/var/backups', '/tmp']
 
     # Normalize path
     current_path = os.path.normpath(current_path)
+
+    # Extended allowed roots for Raspberry Pi and external drives
+    allowed_roots = [
+        '/backups',  # Default backup location
+        '/mnt',  # Standard mount point for external drives
+        '/media',  # Alternative mount point (Raspberry Pi often uses this)
+        '/external_backup',  # Docker mapped external drive
+        '/home',  # User home directories
+        '/var/backups',  # System backup location
+        '/tmp'  # Temporary directory
+    ]
+
+    # Dynamically add specific mount points if they exist (for Raspberry Pi)
+    if os.path.exists('/mnt/medical_backups'):
+        allowed_roots.append('/mnt/medical_backups')
+
+    # For Unraid - add common paths
+    if os.path.exists('/mnt/user'):
+        allowed_roots.append('/mnt/user')
+    if os.path.exists('/mnt/disks'):
+        allowed_roots.append('/mnt/disks')
 
     # Check if path is within allowed roots
     path_allowed = False
@@ -2987,7 +3005,7 @@ def browse_directory():
 
         # List directory contents
         if current_path == '/':
-            # Show only allowed root directories
+            # Show only allowed root directories that exist
             for root in allowed_roots:
                 if os.path.exists(root):
                     entries.append({
@@ -2997,22 +3015,48 @@ def browse_directory():
                     })
         else:
             # List actual directory contents
-            for entry in sorted(os.listdir(current_path)):
-                entry_path = os.path.join(current_path, entry)
+            try:
+                for entry in sorted(os.listdir(current_path)):
+                    entry_path = os.path.join(current_path, entry)
 
-                # Skip hidden files/directories
-                if entry.startswith('.'):
-                    continue
+                    # Skip hidden files/directories
+                    if entry.startswith('.'):
+                        continue
 
-                try:
-                    if os.path.isdir(entry_path):
-                        entries.append({
-                            'name': entry,
-                            'path': entry_path,
-                            'type': 'directory'
-                        })
-                except PermissionError:
-                    continue
+                    try:
+                        if os.path.isdir(entry_path):
+                            # Check if it's a mount point (useful for external drives)
+                            is_mount = os.path.ismount(entry_path)
+
+                            # Get directory size if it's a mount point
+                            mount_info = ""
+                            if is_mount:
+                                try:
+                                    statvfs = os.statvfs(entry_path)
+                                    free_space = statvfs.f_frsize * statvfs.f_bavail
+                                    total_space = statvfs.f_frsize * statvfs.f_blocks
+                                    free_gb = free_space / (1024 ** 3)
+                                    total_gb = total_space / (1024 ** 3)
+                                    mount_info = f" ({free_gb:.1f}GB free / {total_gb:.1f}GB total)"
+                                except:
+                                    mount_info = " (mount point)"
+
+                            entries.append({
+                                'name': entry + mount_info,
+                                'path': entry_path,
+                                'type': 'directory',
+                                'is_mount': is_mount
+                            })
+                    except PermissionError:
+                        # Skip directories we don't have permission to access
+                        continue
+            except PermissionError:
+                # If we can't list the directory at all
+                return jsonify({
+                    'error': 'Permission denied for this directory',
+                    'current_path': current_path,
+                    'entries': []
+                }), 403
 
         return jsonify({
             'current_path': current_path,
@@ -3021,6 +3065,106 @@ def browse_directory():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+def check_backup_location(backup_dir):
+    """Check if backup location is available and writable"""
+    try:
+        # Check if directory exists
+        if not os.path.exists(backup_dir):
+            os.makedirs(backup_dir, exist_ok=True)
+
+        # Check if it's writable
+        test_file = os.path.join(backup_dir, '.write_test')
+        with open(test_file, 'w') as f:
+            f.write('test')
+        os.remove(test_file)
+
+        # Check if it's an external drive (optional)
+        mount_point = os.path.ismount(backup_dir) or os.path.ismount(os.path.dirname(backup_dir))
+
+        # Check available space
+        statvfs = os.statvfs(backup_dir)
+        free_space = statvfs.f_frsize * statvfs.f_bavail
+        free_space_gb = free_space / (1024 ** 3)
+
+        return {
+            'available': True,
+            'writable': True,
+            'is_external': mount_point,
+            'free_space_gb': round(free_space_gb, 2)
+        }
+    except Exception as e:
+        return {
+            'available': False,
+            'error': str(e)
+        }
+
+
+@app.route('/api/backup-drive-status')
+@admin_required
+def backup_drive_status():
+    """Check the status of the backup location (especially for external drives)"""
+    config = load_backup_config()
+    backup_dir = config.get('backup_dir', '/backups')
+
+    try:
+        # Check if directory exists
+        if not os.path.exists(backup_dir):
+            return jsonify({
+                'available': False,
+                'error': 'Backup directory does not exist'
+            })
+
+        # Check if it's writable
+        writable = False
+        try:
+            test_file = os.path.join(backup_dir, '.write_test')
+            with open(test_file, 'w') as f:
+                f.write('test')
+            os.remove(test_file)
+            writable = True
+        except:
+            writable = False
+
+        # Check if it's a mount point (indicates external drive)
+        is_external = os.path.ismount(backup_dir) or os.path.ismount(os.path.dirname(backup_dir))
+
+        # Get mount point path
+        mount_point = backup_dir
+        if not os.path.ismount(backup_dir):
+            # Find the actual mount point
+            path = backup_dir
+            while path != '/':
+                if os.path.ismount(path):
+                    mount_point = path
+                    break
+                path = os.path.dirname(path)
+
+        # Check available space
+        statvfs = os.statvfs(backup_dir)
+        free_space = statvfs.f_frsize * statvfs.f_bavail
+        total_space = statvfs.f_frsize * statvfs.f_blocks
+        free_space_gb = free_space / (1024 ** 3)
+        total_space_gb = total_space / (1024 ** 3)
+        used_percent = ((total_space - free_space) / total_space) * 100 if total_space > 0 else 0
+
+        return jsonify({
+            'available': True,
+            'writable': writable,
+            'is_external': is_external,
+            'mount_point': mount_point,
+            'backup_dir': backup_dir,
+            'free_space_gb': round(free_space_gb, 2),
+            'total_space_gb': round(total_space_gb, 2),
+            'used_percent': round(used_percent, 1)
+        })
+
+    except Exception as e:
+        return jsonify({
+            'available': False,
+            'error': str(e)
+        })
 
 
 @app.route('/api/create-backup', methods=['POST'])
@@ -3032,6 +3176,19 @@ def create_backup():
 
     # Create backup directory if it doesn't exist
     os.makedirs(backup_dir, exist_ok=True)
+
+    # Check if backup location is available
+    location_status = check_backup_location(backup_dir)
+    if not location_status['available']:
+        return jsonify({
+            'error': f"Backup location unavailable: {location_status.get('error', 'Unknown error')}"
+        }), 500
+
+    # Warn if low space (less than 1GB)
+    if location_status.get('free_space_gb', 0) < 1:
+        return jsonify({
+            'error': f"Insufficient space: only {location_status['free_space_gb']}GB available"
+        }), 500
 
     # Generate backup filename
     timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
