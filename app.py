@@ -1377,17 +1377,31 @@ def initialize_app():
 
     # Step 4: Initialize backup scheduler
     print("\nStep 4: Checking backup scheduler configuration...")
-    try:
-        config = load_backup_config()
-        if config.get('auto_backup_enabled'):
-            start_backup_scheduler(config)
-            print(f"✓ Backup scheduler started: {config.get('schedule')}")
-            print(f"  Backup directory: {config.get('backup_dir')}")
-            print(f"  Retention: {config.get('retention_days')} days")
-        else:
-            print("✓ Automatic backups are disabled")
-    except Exception as e:
-        print(f"⚠ Warning: Could not initialize backup scheduler: {e}")
+
+    # Check if we're in the main worker or first worker
+    # In Gunicorn, workers are numbered starting from 1
+    worker_id = os.environ.get('GUNICORN_WORKER_ID', '0')
+
+    # Alternative: Use file lock to ensure only one scheduler
+    if worker_id == '0' or not os.path.exists('/tmp/backup_scheduler.lock'):
+        try:
+            # Create lock file
+            if not os.path.exists('/tmp/backup_scheduler.lock'):
+                with open('/tmp/backup_scheduler.lock', 'w') as f:
+                    f.write(str(os.getpid()))
+
+            config = load_backup_config()
+            if config.get('auto_backup_enabled'):
+                start_backup_scheduler(config)
+                print(f"✓ Backup scheduler started in worker {worker_id}: {config.get('schedule')}")
+                print(f"  Backup directory: {config.get('backup_dir')}")
+                print(f"  Retention: {config.get('retention_days')} days")
+            else:
+                print("✓ Automatic backups are disabled")
+        except Exception as e:
+            print(f"⚠ Warning: Could not initialize backup scheduler: {e}")
+    else:
+        print(f"ℹ Skipping scheduler initialization in worker {worker_id} (already running in another worker)")
 
     print("\n" + "=" * 60)
     print("✓ Application initialization complete!")
