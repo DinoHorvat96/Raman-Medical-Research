@@ -1346,6 +1346,89 @@ def init_icd10_from_excel():
             conn.close()
 
 
+# Dynamic Generic Component Extraction for reporting purposes
+def get_all_generic_components():
+    """
+    Dynamically extract all unique generic components from the medications table
+    Returns a set of unique generic names
+    """
+    conn = get_db_connection()
+    if not conn:
+        return set()
+
+    try:
+        cur = conn.cursor()
+
+        # Get all generic names from medications table
+        cur.execute('''
+            SELECT DISTINCT generic_name 
+            FROM medications 
+            WHERE generic_name IS NOT NULL AND generic_name != ''
+        ''')
+
+        all_generics = set()
+
+        for row in cur.fetchall():
+            generic_name = row[0].strip()
+
+            # Split by semicolon for multi-component medications
+            components = [c.strip().lower() for c in generic_name.split(';')]
+
+            # Add each component to the set
+            for component in components:
+                if component:
+                    all_generics.add(component)
+
+        cur.close()
+        conn.close()
+
+        return all_generics
+
+    except Exception as e:
+        print(f"Error getting generic components: {e}")
+        if conn:
+            conn.close()
+        return set()
+
+
+def extract_generic_components_dynamic(medications_list, all_generic_components):
+    """
+    Extract individual generic drug components from a patient's medications
+    Returns a dictionary with binary flags for each component
+    """
+    # Initialize all components as False
+    generic_flags = {component: False for component in all_generic_components}
+
+    # Check each medication
+    for med in medications_list:
+        if med and 'generic_name' in med and med['generic_name']:
+            generic_name = str(med['generic_name']).lower()
+
+            # Split by semicolon for multiple generics
+            components = [c.strip() for c in generic_name.split(';')]
+
+            # Check each component against our known generics
+            for component in components:
+                if component in generic_flags:
+                    generic_flags[component] = True
+
+    # Convert to column format with safe names
+    return {f'takes_{make_safe_column_name(key)}': (1 if value else 0)
+            for key, value in generic_flags.items()}
+
+
+def make_safe_column_name(name):
+    """Convert a string to a safe column name"""
+    # Replace special characters with underscores
+    import re
+    safe_name = re.sub(r'[^a-zA-Z0-9]', '_', str(name))
+    # Remove multiple underscores
+    safe_name = re.sub(r'_+', '_', safe_name)
+    # Remove leading/trailing underscores
+    safe_name = safe_name.strip('_')
+    return safe_name.lower()
+
+
 def initialize_app():
     """Initialize the application - runs once when module is loaded"""
     print("\n" + "=" * 60)
@@ -1793,7 +1876,11 @@ def new_patient():
                 parts = medication.split('|')
                 if len(parts) == 2:
                     trade_name, generic_name = parts
-                    last_application_days = int(last_app) if last_app and last_app.isdigit() else None
+                    # Default to 0 if blank or invalid
+                    if last_app and last_app.strip() and last_app.isdigit():
+                        last_application_days = int(last_app)
+                    else:
+                        last_application_days = 0  # Default to 0
                     cur.execute('''
                         INSERT INTO ocular_medications (patient_id, trade_name, generic_name, eye, last_application_days)
                         VALUES (%s, %s, %s, %s, %s)
@@ -1809,7 +1896,11 @@ def new_patient():
                 parts = medication.split('|')
                 if len(parts) == 2:
                     trade_name, generic_name = parts
-                    last_application_days = int(last_app) if last_app and last_app.isdigit() else None
+                    # Default to 0 if blank or invalid
+                    if last_app and last_app.strip() and last_app.isdigit():
+                        last_application_days = int(last_app)
+                    else:
+                        last_application_days = 0  # Default to 0
                     cur.execute('''
                         INSERT INTO systemic_medications (patient_id, trade_name, generic_name, last_application_days)
                         VALUES (%s, %s, %s, %s)
@@ -2220,7 +2311,11 @@ def edit_patient(patient_id):
                 parts = medication.split('|')
                 if len(parts) == 2:
                     trade_name, generic_name = parts
-                    last_application_days = int(last_app) if last_app and last_app.isdigit() else None
+                    # Default to 0 if blank or invalid
+                    if last_app and last_app.strip() and last_app.isdigit():
+                        last_application_days = int(last_app)
+                    else:
+                        last_application_days = 0  # Default to 0
                     cur.execute('''
                         INSERT INTO ocular_medications (patient_id, trade_name, generic_name, eye, last_application_days)
                         VALUES (%s, %s, %s, %s, %s)
@@ -2236,7 +2331,11 @@ def edit_patient(patient_id):
                 parts = medication.split('|')
                 if len(parts) == 2:
                     trade_name, generic_name = parts
-                    last_application_days = int(last_app) if last_app and last_app.isdigit() else None
+                    # Default to 0 if blank or invalid
+                    if last_app and last_app.strip() and last_app.isdigit():
+                        last_application_days = int(last_app)
+                    else:
+                        last_application_days = 0  # Default to 0
                     cur.execute('''
                         INSERT INTO systemic_medications (patient_id, trade_name, generic_name, last_application_days)
                         VALUES (%s, %s, %s, %s)
@@ -2351,6 +2450,12 @@ def export_data():
                 ORDER BY generic_name
             ''')
             all_medications = [row['generic_name'] for row in cur.fetchall()]
+
+            # Get all unique generic components for dynamic columns
+            all_generic_components = get_all_generic_components()
+
+            # Sort them alphabetically for consistent column ordering
+            sorted_generic_components = sorted(all_generic_components)
 
             # Get all ocular ICD-10 codes (active OR used by patients)
             cur.execute('''
@@ -2644,6 +2749,12 @@ def export_data():
                     final_columns.append(f'systemic_med_{safe_med}')
                     final_columns.append(f'systemic_med_{safe_med}_days')
 
+            # Add binary columns for generic components
+            if include_medications:
+                for generic_component in sorted_generic_components:
+                    safe_generic = make_safe_column_name(generic_component)
+                    final_columns.append(f'takes_{safe_generic}')
+
             # ============================================================
             # STEP 5: Build export data with binary values
             # ============================================================
@@ -2712,6 +2823,31 @@ def export_data():
                         safe_med = make_safe_column_name(med['generic_name'])
                         row[f'systemic_med_{safe_med}'] = 1
                         row[f'systemic_med_{safe_med}_days'] = med['last_application_days']
+
+                # Extract and fill generic components
+                if include_medications:
+                    # Combine all patient medications
+                    patient_all_meds = []
+
+                    # Add ocular medications
+                    for med in patient_ocular_meds.get(patient['patient_id'], []):
+                        patient_all_meds.append({
+                            'generic_name': med['generic_name']
+                        })
+
+                    # Add systemic medications
+                    for med in patient_systemic_meds.get(patient['patient_id'], []):
+                        patient_all_meds.append({
+                            'generic_name': med['generic_name']
+                        })
+
+                    # Extract generic components dynamically
+                    generic_flags = extract_generic_components_dynamic(patient_all_meds, all_generic_components)
+
+                    # Add to row
+                    for key, value in generic_flags.items():
+                        if key in final_columns:
+                            row[key] = value
 
                 export_data.append(row)
 
@@ -4388,6 +4524,258 @@ def health_check():
         return {'status': 'unhealthy'}, 503
     except Exception as e:
         return {'status': 'unhealthy', 'error': str(e)}, 503
+
+
+@app.route('/settings/medications-bulk-upload')
+@admin_required
+def medications_bulk_upload():
+    """Bulk upload page for medications"""
+    return render_template('medications_bulk_upload.html')
+
+
+@app.route('/api/medications-bulk-preview', methods=['POST'])
+@admin_required
+def medications_bulk_preview():
+    """Preview medication data before importing"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    if file.filename == '':
+        return jsonify({'error': 'No file selected'}), 400
+
+    # Check file extension
+    filename = file.filename.lower()
+    if not any(filename.endswith(ext) for ext in ['.csv', '.xls', '.xlsx']):
+        return jsonify({'error': 'Invalid file format. Please upload CSV, XLS, or XLSX'}), 400
+
+    try:
+        import pandas as pd
+
+        # Read file based on extension
+        if filename.endswith('.csv'):
+            try:
+                df = pd.read_csv(file, encoding='utf-8')
+            except UnicodeDecodeError:
+                file.seek(0)
+                df = pd.read_csv(file, encoding='latin-1')
+        else:
+            df = pd.read_excel(file)
+
+        # Clean column names
+        df.columns = df.columns.str.strip()
+
+        # Get first 10 rows as preview
+        preview_data = df.head(10).fillna('').to_dict('records')
+
+        # Get column names
+        columns = df.columns.tolist()
+
+        # Try to auto-detect columns
+        auto_mapping = {
+            'trade_column': None,
+            'generic_column': None,
+            'type_column': None
+        }
+
+        for col in columns:
+            col_lower = col.lower()
+            # Auto-detect trade name column
+            if any(term in col_lower for term in ['trade', 'brand', 'product']):
+                if not auto_mapping['trade_column']:
+                    auto_mapping['trade_column'] = col
+            # Auto-detect generic name column
+            elif any(term in col_lower for term in ['generic', 'substance', 'active', 'ingredient']):
+                if not auto_mapping['generic_column']:
+                    auto_mapping['generic_column'] = col
+            # Auto-detect type column
+            elif any(term in col_lower for term in ['type', 'category', 'class']):
+                if not auto_mapping['type_column']:
+                    auto_mapping['type_column'] = col
+
+        return jsonify({
+            'success': True,
+            'columns': columns,
+            'preview': preview_data,
+            'total_rows': len(df),
+            'auto_mapping': auto_mapping
+        })
+
+    except Exception as e:
+        return jsonify({'error': f'Error reading file: {str(e)}'}), 500
+
+
+@app.route('/api/medications-bulk-import', methods=['POST'])
+@admin_required
+def medications_bulk_import():
+    """Import medications from CSV/Excel with field mapping"""
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+
+    file = request.files['file']
+    trade_column = request.form.get('trade_column')
+    generic_column = request.form.get('generic_column')
+    type_column = request.form.get('type_column')  # Optional
+
+    if not all([trade_column, generic_column]):
+        return jsonify({'error': 'Missing required field mappings'}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection error'}), 500
+
+    try:
+        import pandas as pd
+
+        # Read file
+        filename = file.filename.lower()
+        if filename.endswith('.csv'):
+            try:
+                df = pd.read_csv(file, encoding='utf-8')
+            except UnicodeDecodeError:
+                file.seek(0)
+                df = pd.read_csv(file, encoding='latin-1')
+        else:
+            df = pd.read_excel(file)
+
+        # Clean column names
+        df.columns = df.columns.str.strip()
+
+        cur = conn.cursor()
+
+        imported = 0
+        skipped = 0
+        errors = []
+
+        for index, row in df.iterrows():
+            try:
+                trade_name = str(row[trade_column]).strip() if pd.notna(row[trade_column]) else None
+                generic_name = str(row[generic_column]).strip() if pd.notna(row[generic_column]) else None
+
+                if not trade_name or not generic_name:
+                    skipped += 1
+                    continue
+
+                # Handle multiple generic names (keep them as-is with semicolons)
+                # This preserves the format: "dexamethasone; neomycin; polymyxin B"
+
+                # Get medication type if column is mapped
+                medication_type = 'Both'  # Default
+                if type_column and type_column in row:
+                    type_value = str(row[type_column]).strip() if pd.notna(row[type_column]) else None
+                    if type_value:
+                        # Try to map to our types
+                        type_lower = type_value.lower()
+                        if 'ocular' in type_lower or 'eye' in type_lower or 'ophthalm' in type_lower:
+                            medication_type = 'Ocular'
+                        elif 'systemic' in type_lower or 'oral' in type_lower or 'general' in type_lower:
+                            medication_type = 'Systemic'
+                        else:
+                            medication_type = 'Both'
+
+                # Check if medication already exists (by trade name)
+                cur.execute('SELECT id FROM medications WHERE trade_name = %s', (trade_name,))
+                existing = cur.fetchone()
+
+                if existing:
+                    # Update existing medication
+                    cur.execute('''
+                        UPDATE medications 
+                        SET generic_name = %s, medication_type = %s, active = TRUE, updated_at = CURRENT_TIMESTAMP
+                        WHERE trade_name = %s
+                    ''', (generic_name, medication_type, trade_name))
+                else:
+                    # Insert new medication
+                    cur.execute('''
+                        INSERT INTO medications (trade_name, generic_name, medication_type, active)
+                        VALUES (%s, %s, %s, TRUE)
+                    ''', (trade_name, generic_name, medication_type))
+
+                imported += 1
+
+            except Exception as e:
+                errors.append(f"Row {index + 2}: {str(e)}")
+                skipped += 1
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        return jsonify({
+            'success': True,
+            'imported': imported,
+            'skipped': skipped,
+            'errors': errors[:10] if errors else []  # Return first 10 errors
+        })
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+            conn.close()
+        return jsonify({'error': f'Import failed: {str(e)}'}), 500
+
+
+@app.route('/api/medications-export')
+@admin_required
+def medications_export():
+    """Export medications to Excel"""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection error'}), 500
+
+    try:
+        import pandas as pd
+        from io import BytesIO
+        from datetime import datetime
+
+        # Get all medications
+        query = '''
+            SELECT 
+                trade_name as "Trade Name",
+                generic_name as "Generic Name",
+                medication_type as "Type",
+                CASE WHEN active THEN 'Active' ELSE 'Inactive' END as "Status"
+            FROM medications
+            ORDER BY trade_name
+        '''
+
+        df = pd.read_sql_query(query, conn)
+        conn.close()
+
+        # Create Excel file
+        output = BytesIO()
+        with pd.ExcelWriter(output, engine='openpyxl') as writer:
+            df.to_excel(writer, sheet_name='Medications', index=False)
+
+            # Auto-adjust column widths
+            worksheet = writer.sheets['Medications']
+            for column in worksheet.columns:
+                max_length = 0
+                column = [cell for cell in column]
+                for cell in column:
+                    try:
+                        if len(str(cell.value)) > max_length:
+                            max_length = len(str(cell.value))
+                    except:
+                        pass
+                adjusted_width = min(max_length + 2, 50)
+                worksheet.column_dimensions[column[0].column_letter].width = adjusted_width
+
+        output.seek(0)
+
+        from flask import Response
+        return Response(
+            output.getvalue(),
+            mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            headers={
+                'Content-Disposition': f'attachment; filename=medications_{datetime.now().strftime("%Y%m%d")}.xlsx'
+            }
+        )
+
+    except Exception as e:
+        if conn:
+            conn.close()
+        return jsonify({'error': f'Export failed: {str(e)}'}), 500
 
 
 # Application Initialization and Startup

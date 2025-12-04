@@ -1,0 +1,678 @@
+<!-- templates/medications_bulk_upload.html -->
+{% extends "base.html" %}
+
+{% block title %}Bulk Upload Medications{% endblock %}
+
+{% block content %}
+<style>
+    .upload-container {
+        max-width: 1200px;
+        margin: 0 auto;
+    }
+
+    .upload-section {
+        background: white;
+        border-radius: 8px;
+        padding: 30px;
+        box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        margin-bottom: 30px;
+    }
+
+    .section-title {
+        font-size: 20px;
+        font-weight: 600;
+        color: #2c3e50;
+        margin-bottom: 20px;
+        padding-bottom: 10px;
+        border-bottom: 2px solid #ecf0f1;
+    }
+
+    .upload-area {
+        border: 2px dashed #ddd;
+        border-radius: 8px;
+        padding: 40px;
+        text-align: center;
+        background: #f8f9fa;
+        transition: all 0.3s;
+        cursor: pointer;
+    }
+
+    .upload-area:hover {
+        border-color: #3498db;
+        background: #e8f4f8;
+    }
+
+    .upload-area.dragover {
+        border-color: #27ae60;
+        background: #e8f5e8;
+    }
+
+    .upload-icon {
+        font-size: 48px;
+        color: #95a5a6;
+        margin-bottom: 15px;
+    }
+
+    .file-input {
+        display: none;
+    }
+
+    .file-info {
+        margin-top: 20px;
+        padding: 15px;
+        background: #e8f4f8;
+        border-radius: 6px;
+        display: none;
+    }
+
+    .file-info.active {
+        display: block;
+    }
+
+    .mapping-section {
+        display: none;
+        margin-top: 30px;
+    }
+
+    .mapping-section.active {
+        display: block;
+    }
+
+    .mapping-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+        gap: 20px;
+        margin-bottom: 20px;
+    }
+
+    .mapping-field {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .mapping-field label {
+        font-weight: 500;
+        color: #2c3e50;
+        margin-bottom: 8px;
+        font-size: 14px;
+    }
+
+    .mapping-field label.required::after {
+        content: ' *';
+        color: #e74c3c;
+    }
+
+    .mapping-field select {
+        padding: 10px;
+        border: 1px solid #ddd;
+        border-radius: 6px;
+        font-size: 14px;
+        background: white;
+    }
+
+    .preview-section {
+        display: none;
+        margin-top: 30px;
+    }
+
+    .preview-section.active {
+        display: block;
+    }
+
+    .preview-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 15px;
+        font-size: 13px;
+    }
+
+    .preview-table th {
+        background: #f8f9fa;
+        padding: 10px;
+        text-align: left;
+        font-weight: 600;
+        border-bottom: 2px solid #dee2e6;
+    }
+
+    .preview-table td {
+        padding: 10px;
+        border-bottom: 1px solid #dee2e6;
+    }
+
+    .preview-table tr:hover {
+        background: #f8f9fa;
+    }
+
+    .btn-group {
+        display: flex;
+        gap: 15px;
+        margin-top: 20px;
+    }
+
+    .btn-import {
+        background: #27ae60;
+        color: white;
+        padding: 12px 30px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 15px;
+        font-weight: 500;
+    }
+
+    .btn-import:hover:not(:disabled) {
+        background: #229954;
+    }
+
+    .btn-import:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+
+    .import-results {
+        display: none;
+        margin-top: 20px;
+        padding: 20px;
+        border-radius: 8px;
+    }
+
+    .import-results.success {
+        background: #d4edda;
+        border: 1px solid #c3e6cb;
+        color: #155724;
+    }
+
+    .import-results.error {
+        background: #f8d7da;
+        border: 1px solid #f5c6cb;
+        color: #721c24;
+    }
+
+    .import-results.active {
+        display: block;
+    }
+
+    .format-info {
+        background: #fff3cd;
+        border: 1px solid #ffc107;
+        border-radius: 6px;
+        padding: 15px;
+        margin-bottom: 20px;
+    }
+
+    .format-info h4 {
+        margin: 0 0 10px 0;
+        color: #856404;
+    }
+
+    .format-info ul {
+        margin: 5px 0;
+        padding-left: 20px;
+    }
+
+    .loading {
+        display: none;
+        text-align: center;
+        padding: 20px;
+    }
+
+    .loading.active {
+        display: block;
+    }
+
+    .spinner {
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #3498db;
+        border-radius: 50%;
+        width: 40px;
+        height: 40px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 15px;
+    }
+
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+
+    .export-section {
+        text-align: right;
+        margin-bottom: 20px;
+    }
+
+    .btn-export {
+        background: #95a5a6;
+        color: white;
+        padding: 10px 20px;
+        border: none;
+        border-radius: 6px;
+        cursor: pointer;
+        font-size: 14px;
+        text-decoration: none;
+        display: inline-block;
+    }
+
+    .btn-export:hover {
+        background: #7f8c8d;
+    }
+
+    .info-box {
+        background: #e3f2fd;
+        border: 1px solid #2196f3;
+        border-radius: 6px;
+        padding: 15px;
+        margin-top: 20px;
+    }
+
+    .info-box strong {
+        color: #1565c0;
+    }
+</style>
+
+<div class="upload-container">
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+        <h2>Bulk Upload Medications</h2>
+        <div style="display: flex; gap: 10px;">
+            <a href="{{ url_for('settings_medications') }}" class="btn btn-secondary">Back to Medications</a>
+        </div>
+    </div>
+
+    <div class="export-section">
+        <a href="{{ url_for('medications_export') }}" class="btn-export">
+            📥 Export Current Medications to Excel
+        </a>
+    </div>
+
+    <div class="format-info">
+        <h4>ℹ️ File Format Requirements</h4>
+        <ul>
+            <li>Accepted formats: CSV, XLS, or XLSX</li>
+            <li>Required columns: Trade Name and Generic Name</li>
+            <li>Optional column: Type (Ocular/Systemic/Both)</li>
+            <li>Multiple generic names should be separated by semicolon (;)</li>
+            <li>Example: "dexamethasone; neomycin; polymyxin B"</li>
+            <li>Duplicate trade names will update existing entries</li>
+        </ul>
+    </div>
+
+    <div class="upload-section">
+        <h3 class="section-title">Step 1: Upload File</h3>
+
+        <div class="upload-area" id="uploadArea">
+            <div class="upload-icon">💊</div>
+            <h3>Click to browse or drag and drop</h3>
+            <p>CSV, XLS, or XLSX files up to 10MB</p>
+            <input type="file" id="fileInput" class="file-input" accept=".csv,.xls,.xlsx">
+        </div>
+
+        <div class="file-info" id="fileInfo">
+            <strong>Selected file:</strong> <span id="fileName"></span><br>
+            <strong>Size:</strong> <span id="fileSize"></span>
+        </div>
+
+        <div class="loading" id="loadingPreview">
+            <div class="spinner"></div>
+            <p>Analyzing file structure...</p>
+        </div>
+
+        <div class="mapping-section" id="mappingSection">
+            <h3 class="section-title">Step 2: Map Columns</h3>
+            <p>Select which columns from your file correspond to the database fields:</p>
+
+            <div class="mapping-grid">
+                <div class="mapping-field">
+                    <label for="tradeColumn" class="required">Trade Name Column</label>
+                    <select id="tradeColumn" required>
+                        <option value="">-- Select column --</option>
+                    </select>
+                </div>
+
+                <div class="mapping-field">
+                    <label for="genericColumn" class="required">Generic Name Column</label>
+                    <select id="genericColumn" required>
+                        <option value="">-- Select column --</option>
+                    </select>
+                </div>
+
+                <div class="mapping-field">
+                    <label for="typeColumn">Type Column (Optional)</label>
+                    <select id="typeColumn">
+                        <option value="">-- No type column --</option>
+                    </select>
+                </div>
+            </div>
+
+            <div class="info-box">
+                <strong>ℹ️ Important Notes:</strong>
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    <li>Generic names with semicolons (;) will be preserved as multi-component medications</li>
+                    <li>Example: "dexamethasone; neomycin" stays as one medication with multiple generics</li>
+                    <li>Type will default to "Both" if not specified or unrecognized</li>
+                    <li>Type detection: "eye", "ocular", "ophthalmic" → Ocular | "oral", "systemic" → Systemic</li>
+                </ul>
+            </div>
+        </div>
+
+        <div class="preview-section" id="previewSection">
+            <h3 class="section-title">Step 3: Preview Data</h3>
+            <p>First 10 rows from your file (Total rows: <span id="totalRows">0</span>):</p>
+
+            <div style="overflow-x: auto;">
+                <table class="preview-table" id="previewTable">
+                    <thead id="previewHead"></thead>
+                    <tbody id="previewBody"></tbody>
+                </table>
+            </div>
+        </div>
+
+        <div class="btn-group" id="actionButtons" style="display: none;">
+            <button class="btn-import" id="importBtn" disabled>
+                📤 Import Medications
+            </button>
+            <button class="btn btn-secondary" onclick="resetForm()">
+                Cancel
+            </button>
+        </div>
+
+        <div class="loading" id="loadingImport">
+            <div class="spinner"></div>
+            <p>Importing medications...</p>
+        </div>
+
+        <div class="import-results" id="importResults"></div>
+    </div>
+</div>
+
+<script>
+let selectedFile = null;
+let fileData = null;
+
+// File upload handling
+const uploadArea = document.getElementById('uploadArea');
+const fileInput = document.getElementById('fileInput');
+const fileInfo = document.getElementById('fileInfo');
+
+uploadArea.addEventListener('click', () => fileInput.click());
+
+uploadArea.addEventListener('dragover', (e) => {
+    e.preventDefault();
+    uploadArea.classList.add('dragover');
+});
+
+uploadArea.addEventListener('dragleave', () => {
+    uploadArea.classList.remove('dragover');
+});
+
+uploadArea.addEventListener('drop', (e) => {
+    e.preventDefault();
+    uploadArea.classList.remove('dragover');
+
+    const files = e.dataTransfer.files;
+    if (files.length > 0) {
+        handleFile(files[0]);
+    }
+});
+
+fileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 0) {
+        handleFile(e.target.files[0]);
+    }
+});
+
+async function handleFile(file) {
+    // Validate file type
+    const validTypes = ['text/csv', 'application/vnd.ms-excel', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'];
+    const validExtensions = ['.csv', '.xls', '.xlsx'];
+
+    const hasValidExtension = validExtensions.some(ext => file.name.toLowerCase().endsWith(ext));
+
+    if (!hasValidExtension && !validTypes.includes(file.type)) {
+        alert('Please upload a CSV, XLS, or XLSX file');
+        return;
+    }
+
+    // Validate file size (10MB)
+    if (file.size > 10 * 1024 * 1024) {
+        alert('File size must be less than 10MB');
+        return;
+    }
+
+    selectedFile = file;
+
+    // Show file info
+    document.getElementById('fileName').textContent = file.name;
+    document.getElementById('fileSize').textContent = formatFileSize(file.size);
+    fileInfo.classList.add('active');
+
+    // Preview file
+    await previewFile();
+}
+
+async function previewFile() {
+    if (!selectedFile) return;
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+
+    document.getElementById('loadingPreview').classList.add('active');
+    document.getElementById('mappingSection').classList.remove('active');
+    document.getElementById('previewSection').classList.remove('active');
+    document.getElementById('actionButtons').style.display = 'none';
+
+    try {
+        const response = await fetch('/api/medications-bulk-preview', {
+            method: 'POST',
+            body: formData
+        });
+
+        if (!response.ok) {
+            const error = await response.json();
+            throw new Error(error.error || 'Failed to preview file');
+        }
+
+        const data = await response.json();
+        fileData = data;
+
+        // Populate column selectors
+        populateColumnSelectors(data.columns, data.auto_mapping);
+
+        // Show preview
+        showPreview(data.preview, data.total_rows);
+
+        // Show sections
+        document.getElementById('mappingSection').classList.add('active');
+        document.getElementById('previewSection').classList.add('active');
+        document.getElementById('actionButtons').style.display = 'flex';
+
+    } catch (error) {
+        alert('Error previewing file: ' + error.message);
+    } finally {
+        document.getElementById('loadingPreview').classList.remove('active');
+    }
+}
+
+function populateColumnSelectors(columns, autoMapping) {
+    const tradeSelect = document.getElementById('tradeColumn');
+    const genericSelect = document.getElementById('genericColumn');
+    const typeSelect = document.getElementById('typeColumn');
+
+    // Clear existing options
+    tradeSelect.innerHTML = '<option value="">-- Select column --</option>';
+    genericSelect.innerHTML = '<option value="">-- Select column --</option>';
+    typeSelect.innerHTML = '<option value="">-- No type column --</option>';
+
+    // Add column options
+    columns.forEach(col => {
+        tradeSelect.innerHTML += `<option value="${col}">${col}</option>`;
+        genericSelect.innerHTML += `<option value="${col}">${col}</option>`;
+        typeSelect.innerHTML += `<option value="${col}">${col}</option>`;
+    });
+
+    // Apply auto-detected mappings
+    if (autoMapping.trade_column) {
+        tradeSelect.value = autoMapping.trade_column;
+    }
+    if (autoMapping.generic_column) {
+        genericSelect.value = autoMapping.generic_column;
+    }
+    if (autoMapping.type_column) {
+        typeSelect.value = autoMapping.type_column;
+    }
+
+    // Enable import button if required fields are mapped
+    validateMapping();
+}
+
+function showPreview(previewData, totalRows) {
+    document.getElementById('totalRows').textContent = totalRows;
+
+    const thead = document.getElementById('previewHead');
+    const tbody = document.getElementById('previewBody');
+
+    // Clear existing content
+    thead.innerHTML = '';
+    tbody.innerHTML = '';
+
+    if (previewData.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="100%" style="text-align: center;">No data to preview</td></tr>';
+        return;
+    }
+
+    // Create header
+    const headers = Object.keys(previewData[0]);
+    const headerRow = document.createElement('tr');
+    headers.forEach(header => {
+        const th = document.createElement('th');
+        th.textContent = header;
+        headerRow.appendChild(th);
+    });
+    thead.appendChild(headerRow);
+
+    // Create data rows
+    previewData.forEach(row => {
+        const tr = document.createElement('tr');
+        headers.forEach(header => {
+            const td = document.createElement('td');
+            const value = row[header] || '';
+            // Highlight cells with semicolons to show multi-generic format
+            if (value.includes(';')) {
+                td.innerHTML = `<span style="color: #2196f3; font-weight: 500;">${value}</span>`;
+            } else {
+                td.textContent = value;
+            }
+            tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+    });
+}
+
+function validateMapping() {
+    const tradeColumn = document.getElementById('tradeColumn').value;
+    const genericColumn = document.getElementById('genericColumn').value;
+
+    const importBtn = document.getElementById('importBtn');
+    importBtn.disabled = !tradeColumn || !genericColumn;
+}
+
+// Add event listeners for column selectors
+document.getElementById('tradeColumn').addEventListener('change', validateMapping);
+document.getElementById('genericColumn').addEventListener('change', validateMapping);
+
+document.getElementById('importBtn').addEventListener('click', importCodes);
+
+async function importCodes() {
+    if (!selectedFile) return;
+
+    const tradeColumn = document.getElementById('tradeColumn').value;
+    const genericColumn = document.getElementById('genericColumn').value;
+    const typeColumn = document.getElementById('typeColumn').value;
+
+    if (!tradeColumn || !genericColumn) {
+        alert('Please map the required columns');
+        return;
+    }
+
+    if (!confirm('Are you sure you want to import these medications? Existing medications with the same trade name will be updated.')) {
+        return;
+    }
+
+    const formData = new FormData();
+    formData.append('file', selectedFile);
+    formData.append('trade_column', tradeColumn);
+    formData.append('generic_column', genericColumn);
+    if (typeColumn) {
+        formData.append('type_column', typeColumn);
+    }
+
+    document.getElementById('loadingImport').classList.add('active');
+    document.getElementById('importBtn').disabled = true;
+    document.getElementById('importResults').classList.remove('active');
+
+    try {
+        const response = await fetch('/api/medications-bulk-import', {
+            method: 'POST',
+            body: formData
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            showImportResults(data, 'success');
+        } else {
+            showImportResults(data, 'error');
+        }
+
+    } catch (error) {
+        showImportResults({error: 'Import failed: ' + error.message}, 'error');
+    } finally {
+        document.getElementById('loadingImport').classList.remove('active');
+    }
+}
+
+function showImportResults(data, type) {
+    const resultsDiv = document.getElementById('importResults');
+    resultsDiv.className = 'import-results ' + type + ' active';
+
+    if (type === 'success') {
+        let html = `<h4>✅ Import Successful!</h4>`;
+        html += `<p><strong>Imported:</strong> ${data.imported} medications</p>`;
+        if (data.skipped > 0) {
+            html += `<p><strong>Skipped:</strong> ${data.skipped} rows</p>`;
+        }
+        if (data.errors && data.errors.length > 0) {
+            html += `<p><strong>Errors:</strong></p><ul>`;
+            data.errors.forEach(error => {
+                html += `<li>${error}</li>`;
+            });
+            html += `</ul>`;
+        }
+        html += `<p style="margin-top: 15px;">`;
+        html += `<a href="{{ url_for('settings_medications') }}" class="btn btn-primary">View Medications</a>`;
+        html += `</p>`;
+        resultsDiv.innerHTML = html;
+    } else {
+        resultsDiv.innerHTML = `<h4>❌ Import Failed</h4><p>${data.error}</p>`;
+    }
+}
+
+function resetForm() {
+    selectedFile = null;
+    fileData = null;
+    fileInput.value = '';
+    fileInfo.classList.remove('active');
+    document.getElementById('mappingSection').classList.remove('active');
+    document.getElementById('previewSection').classList.remove('active');
+    document.getElementById('actionButtons').style.display = 'none';
+    document.getElementById('importResults').classList.remove('active');
+}
+
+function formatFileSize(bytes) {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+}
+</script>
+
+{% endblock %}

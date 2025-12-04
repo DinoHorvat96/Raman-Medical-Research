@@ -55,7 +55,11 @@
     <div class="data-table">
         <div class="table-header">
             <h3 style="margin: 0;">Medications ({{ medications|length }} total)</h3>
-            <button onclick="openNewModal()" class="btn-add-new">+ Add New Medication</button>
+            <div style="display: flex; gap: 10px;">
+                <a href="{{ url_for('medications_export') }}" class="btn btn-secondary">📥 Export</a>
+                <a href="{{ url_for('medications_bulk_upload') }}" class="btn btn-primary">📤 Bulk Upload</a>
+                <button onclick="openNewModal()" class="btn-add-new">+ Add Single</button>
+            </div>
         </div>
 
         {% if medications %}
