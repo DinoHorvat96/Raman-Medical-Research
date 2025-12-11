@@ -8,12 +8,15 @@ Raman is a professional medical research database designed specifically for coll
 
 - **Dual-table architecture** for data security (sensitive vs. statistical data)
 - **Automatic patient ID generation** starting from 1500 with manual override capability
+- **Real-time ID availability checking** with concurrent user support
 - **Comprehensive ocular condition tracking** with 40+ specialized fields
 - **SHA-256 person hashing** for anonymized data analysis
 - **Multi-user support** with role-based access control
 - **ICD-10 coding** for conditions and medications
-- **Flexible export system** with CSV and Excel formats
+- **Bulk import/export system** with CSV and Excel formats
 - **Complete reference data management** for codes, medications, and surgeries
+- **Advanced filtering system** for patient searches and data exports
+- **Automated backup & restore** with scheduling support
 - **Advanced form validation** with real-time feedback
 
 ## 📋 Database Architecture
@@ -23,7 +26,7 @@ Raman is a professional medical research database designed specifically for coll
 #### 1. **users**
 Authentication and authorization
 - `user_id`, `username`, `password_hash`, `email`, `role`, `created_at`, `last_login`
-- Roles: **Administrator**, **Staff** (Patient role removed)
+- Roles: **Administrator**, **Staff**
 
 #### 2. **patients_sensitive** (Protected Data)
 Personal identifiable information
@@ -115,18 +118,22 @@ Systemic medications
 #### 10. **icd10_ocular_conditions**
 Ophthalmic ICD-10 codes
 - `id`, `code`, `description`, `category`, `active`
+- Supports bulk import from Excel/CSV
 
 #### 11. **icd10_systemic_conditions**
 Systemic ICD-10 codes
 - `id`, `code`, `description`, `category`, `active`
+- Supports bulk import from Excel/CSV
 
 #### 12. **medications**
 HALMED medication registry
 - `id`, `trade_name`, `generic_name`, `medication_type` (Ocular/Systemic/Both), `active`
+- Supports multi-component medications (separated by semicolon)
+- Supports bulk import from Excel/CSV
 
 #### 13. **surgeries**
 Ocular surgical procedures
-- `id`, `surgery_code`, `description`, `category`, `active`
+- `id`, `code`, `description`, `category`, `active`
 
 ## 🚀 Getting Started
 
@@ -143,6 +150,9 @@ raman/
 ├── app.py
 ├── requirements.txt
 ├── .env
+├── gunicorn_config.py
+├── docker-compose.yml
+├── nginx.conf
 ├── templates/
 │   ├── base.html
 │   ├── login.html
@@ -152,10 +162,13 @@ raman/
 │   ├── validate_data.html
 │   ├── export_data.html
 │   ├── settings.html
+│   ├── settings_backup.html
 │   ├── settings_icd10_ocular.html
 │   ├── settings_icd10_systemic.html
 │   ├── settings_medications.html
 │   ├── settings_surgeries.html
+│   ├── icd10_bulk_upload.html
+│   ├── medications_bulk_upload.html
 │   └── user_management.html
 └── README.md
 ```
@@ -167,17 +180,20 @@ pip install -r requirements.txt
 
 Required packages:
 ```
-Flask==3.0.0
+Flask==3.0.3
 Flask-Bcrypt==1.0.1
 psycopg2-binary==2.9.9
-python-dotenv==1.0.0
-openpyxl==3.1.2
+python-dotenv==1.0.1
+pandas==2.3.3
+openpyxl==3.1.5
+gunicorn==23.0.0
+schedule==1.2.2
 ```
 
 3. **Configure database** (create `.env` file):
 ```env
 # Database Configuration
-DB_NAME=raman_research
+DB_NAME=raman_research_prod
 DB_USER=postgres
 DB_PASSWORD=your_password_here
 DB_HOST=localhost
@@ -188,9 +204,11 @@ SECRET_KEY=change-this-to-a-random-secret-key # openssl rand -base64 32
 
 # Patient ID Configuration
 # Starting patient ID for auto-assignment
-# This should be set to approximately where your existing data is (if any)
-# Default: 1500
 STARTING_PATIENT_ID=1500
+
+# Backup Configuration
+BACKUP_DIR=/mnt/medical_backups/raman_backups
+BACKUP_RETENTION_DAYS=90
 
 # Application Settings
 FLASK_ENV=production
@@ -198,18 +216,32 @@ FLASK_DEBUG=False
 ```
 
 4. **Run the application**:
+
+**Development:**
 ```bash
 python app.py
+```
+
+**Production (with Gunicorn):**
+```bash
+gunicorn --config gunicorn_config.py app:app
+```
+
+**Docker (recommended for production):**
+```bash
+docker-compose up -d
 ```
 
 The application will:
 - Automatically create the database if it doesn't exist
 - Initialize all tables with proper schema
 - Create default admin user (username: `Admin`, password: `admin123`)
-- Start patient ID sequence at 01500
+- Start patient ID sequence at configured starting ID
+- Import ICD-10 codes from Excel files if available
 
 5. **Access the application**:
-- Open http://localhost:5000
+- **Development:** http://localhost:5000
+- **Docker/Production:** http://localhost:8088 (via Nginx)
 - Login with: `Admin` / `admin123`
 - **Important:** Change the default password immediately after first login
 
@@ -220,13 +252,14 @@ The application will:
 - **Password hashing**: Bcrypt with salt
 - **Session-based authentication**: Secure user sessions
 - **Role-based access control**: Administrator and Staff roles
-- **Person hashing**: SHA-256 hashing of MBO for anonymous patient tracking across entries
+- **Person hashing**: SHA-256 hashing of MBO for anonymous patient tracking
 - **Export access control**: 
   - Administrators: Can export both sensitive (with names/MBO) and anonymized data
   - Staff: Can only export anonymized data (enforced server-side)
+- **Security headers**: X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, HSTS
 
 ### Data Validation
-- **Real-time patient ID validation**: Prevents duplicate entries
+- **Real-time patient ID validation**: Prevents duplicate entries with concurrent user support
 - **Comprehensive form validation**: All fields validated client-side and server-side
 - **Date validation**: Ensures logical date ranges
 - **MBO format validation**: 9-digit format enforcement
@@ -237,15 +270,18 @@ The application will:
 ### Administrator
 - Full system access
 - Manage reference data (ICD-10 codes, medications, surgeries)
+- Bulk import/export capabilities
 - User management (create, edit, delete users)
 - Export sensitive data (includes patient names and MBO)
 - Export anonymized data
+- Backup and restore operations
 - System configuration
 
 ### Staff
 - Create and edit patient records
 - View all patient data
 - Data entry and validation
+- Search and filter patients
 - Export anonymized data only (no access to sensitive exports)
 
 ## 📊 Key Features
@@ -253,11 +289,12 @@ The application will:
 ### 1. Patient Management
 
 #### Patient ID System
-- **Auto-increment** starting from 01500
+- **Auto-increment** starting from configurable ID (default: 01500)
 - **5-digit format**: 00001-99999 (leading zeros preserved)
 - **Manual override** with real-time duplicate detection
 - **Concurrent entry protection** across multiple users
 - **API endpoint** for validation before form submission
+- **Periodic background checking** to detect ID conflicts
 
 #### Creating New Patients
 Comprehensive form with sections:
@@ -269,9 +306,10 @@ Comprehensive form with sections:
 - **Medications**: Ocular and systemic medications with timing
 
 #### Editing Existing Patients
-- **Search functionality**: Find patients by ID or name
+- **Advanced search functionality**: Find patients by ID, name, or MBO
+- **Filter system**: Filter by conditions, surgeries, medications
 - **Pre-filled forms**: All existing data loaded automatically
-- **Update tracking**: Changes logged
+- **Update tracking**: Changes logged with timestamps
 - **Concurrent editing prevention**: Lock mechanism for data integrity
 
 ### 2. Hierarchical Form Logic
@@ -291,7 +329,7 @@ Comprehensive form with sections:
 - Clear visual indication of required fields
 - Smooth transitions between states
 
-### 3. Data Export System
+### 3. Advanced Data Export System
 
 #### Export Options
 - **Format**: CSV (Excel-compatible) or XLSX (native Excel with formatting)
@@ -306,59 +344,73 @@ Comprehensive form with sections:
   - Systemic Conditions
   - Medications (Ocular & Systemic)
 - **Date Range**: Optional from/to date filters
+- **Advanced Filters**: Filter by specific conditions, surgeries, medications
 
 #### Export Features
-- **Role-based access**: Staff can only export anonymized data (enforced server-side)
+- **Binary column format**: Each medication/condition/surgery gets its own column
 - **Dynamic columns**: Adapts to patients with varying numbers of conditions/medications
-- **Proper column ordering**: Patient info first, then conditions (matches form layout)
+- **Proper column ordering**: Patient info first, then conditions
 - **Excel formatting**: Blue headers, bold text, auto-sized columns
+- **Generic component extraction**: Individual medication components tracked
 - **Audit-friendly filenames**: Includes data type and timestamp
 
-#### Export Column Order (Sensitive)
-```
-A: patient_id
-B: patient_name
-C: mbo
-D: sex
-E: date_of_birth
-F: date_of_sample_collection
-G: eye
-H: person_hash
-I: age
-J+: Main ocular conditions (if selected)
-Then: Dynamic columns (other conditions, surgeries, medications)
-```
+### 4. Bulk Import/Export System
 
-#### Export Column Order (Anonymized)
-```
-A: patient_id
-B: person_hash
-C: sex
-D: eye
-E: age
-F+: Main ocular conditions (if selected)
-Then: Dynamic columns (other conditions, surgeries, medications)
-```
+#### ICD-10 Codes Management
+- **Bulk Upload**: Import from CSV/XLSX files
+- **Column Mapping**: Intelligent auto-detection of code, description, category columns
+- **Preview**: Review first 10 rows before importing
+- **Category Auto-detection**: Automatically categorizes codes based on prefixes
+- **Export**: Download all codes to Excel for editing
+- **Update on Conflict**: Updates existing codes if duplicates found
 
-### 4. Reference Data Management
+#### Medications Management
+- **Bulk Upload**: Import medication lists from Excel/CSV
+- **Multi-component Support**: Preserves semicolon-separated generic names
+- **Type Detection**: Auto-detects Ocular/Systemic/Both based on keywords
+- **Column Mapping**: Flexible mapping of trade name, generic name, type
+- **Export**: Download current medication list to Excel
+
+### 5. Backup & Restore System
+
+#### Backup Features
+- **Manual Backups**: Create on-demand database backups
+- **Scheduled Backups**: Automatic backups (hourly, daily, weekly, monthly)
+- **External Drive Support**: Save backups to external drives or network storage
+- **Directory Browser**: Navigate server filesystem to select backup location
+- **Retention Management**: Automatic deletion of old backups based on retention policy
+- **Backup Verification**: Real-time status of backup location and available space
+
+#### Restore Features
+- **One-click Restore**: Restore database from any backup file
+- **Download Backups**: Download backup files to local machine
+- **Backup Management**: View, download, restore, or delete existing backups
+- **Safety Confirmations**: Multiple confirmations before restore operations
+
+### 6. Reference Data Management
 
 Administrators can manage all reference data through the Settings interface:
 
 #### ICD-10 Ocular Conditions
-- Add, edit, deactivate codes
+- Add, edit, deactivate, or permanently delete codes
+- Bulk upload from Excel/CSV files
+- Export all codes to Excel
 - Search by code or description
 - Category organization
 - Real-time search filtering
 
 #### ICD-10 Systemic Conditions
 - Full CRUD operations
+- Bulk import capabilities
 - Category support
 - Active/inactive status management
 
 #### Medications
 - Trade names and generic names
 - Medication type (Ocular/Systemic/Both)
+- Multi-component medications (semicolon-separated)
 - HALMED registry compatible
+- Bulk import from Excel/CSV
 - Search by trade or generic name
 
 #### Surgical Procedures
@@ -374,7 +426,7 @@ Administrators can manage all reference data through the Settings interface:
   - Injection
   - Other (or custom category)
 
-### 5. User Management
+### 7. User Management
 
 #### User Administration
 - Create new users (Staff or Administrator)
@@ -388,388 +440,114 @@ Administrators can manage all reference data through the Settings interface:
 - Administrators count
 - Staff Members count
 
-## 📝 Complete Workflows
-
-### Workflow 1: Adding a New Patient
-
-1. **Login** → Dashboard → Click **"New Patient"**
-
-2. **General Data Section**:
-   - Patient ID: Auto-filled with next ID (e.g., 01523), editable
-   - Patient Name: Full name
-   - MBO: 9-digit number (format: 123456789)
-   - Sex: Male/Female
-   - Date of Birth: Calendar picker
-   - Date of Sample Collection: Calendar picker
-   - Eye: L (Left), R (Right), or ND (No Data)
-
-3. **Main Ocular Conditions**:
-   
-   **Lens Status & Cataract:**
-   - Select: Phakic, Pseudophakic, or Aphakic
-   - If Phakic → Enter LOCS III grades (NO, NC, C, P)
-   - If Pseudophakic → Select IOL type
-   - If Aphakic → Select etiology
-
-   **Glaucoma:**
-   - Enable if present
-   - If yes → Select etiology, mark OHT/PAC if applicable
-   - Mark steroid responder if applicable
-   - Mark PXS or PDS if present
-
-   **Diabetic Retinopathy:**
-   - Enable if present
-   - Select stage: NPDR or PDR
-   - If NPDR → Select severity (Mild/Moderate/Severe)
-   - If PDR → Select status (Active/Stable/Regressed)
-
-   **Macular Edema:**
-   - Enable if present
-   - Select etiology
-
-   **Macular Degeneration/Dystrophy:**
-   - Enable if present
-   - Select type and etiology
-   - If AMD → Select dry/wet, stage, exudation status
-   - If Other → Select stage, exudation status
-
-   **Macular Hole/VMT:**
-   - Enable if present
-   - Select etiology (Idiopathic/Traumatic/Secondary)
-   - If secondary → Specify cause
-   - Select treatment status
-
-   **Epiretinal Membrane:**
-   - Enable if present
-   - Select etiology
-   - If secondary → Specify cause
-   - Select treatment status
-
-   **Retinal Detachment:**
-   - Enable if present
-   - Select etiology
-   - Select treatment status
-   - Mark PVR if present
-
-   **Vitreous Hemorrhage/Opacification:**
-   - Enable if present
-   - Select etiology
-
-4. **Other Ocular Conditions** (Repeatable):
-   - Click **"+ Add Other Ocular Condition"**
-   - Select ICD-10 code from dropdown
-   - Select eye (R/L/R+L/ND)
-   - Add more as needed
-   - Remove with (−) button
-
-5. **Previous Ocular Surgeries** (Repeatable):
-   - Click **"+ Add Surgery"**
-   - Select surgery from dropdown
-   - Select eye
-   - Add more as needed
-   - Remove with (−) button
-
-6. **Systemic Conditions** (Repeatable):
-   - Click **"+ Add Systemic Condition"**
-   - Select ICD-10 code
-   - Add more as needed
-   - Remove with (−) button
-
-7. **Ocular Medications** (Repeatable):
-   - Click **"+ Add Ocular Medication"**
-   - Select medication (trade name)
-   - Generic name auto-fills
-   - Enter days since last application
-   - Select eye
-   - Add more as needed
-   - Remove with (−) button
-
-8. **Systemic Medications** (Repeatable):
-   - Click **"+ Add Systemic Medication"**
-   - Select medication
-   - Generic name auto-fills
-   - Enter days since last application
-   - Add more as needed
-   - Remove with (−) button
-
-9. **Save** → All data distributed across appropriate tables
-
-### Workflow 2: Validating/Editing Existing Data
-
-1. **Dashboard** → Click **"Validate Data"**
-
-2. **Search Options**:
-   - Search by Patient ID (exact match)
-   - Search by Patient Name (partial match)
-   - Recent patients list
-
-3. **Select Patient** → Click patient row
-
-4. **Edit Form Opens**:
-   - All fields pre-filled with existing data
-   - All repeatable sections show existing entries
-   - Modify any field as needed
-
-5. **Save Updates** → Changes committed to database
-
-### Workflow 3: Exporting Data
-
-1. **Dashboard** → Click **"Export Data"**
-
-2. **View Statistics**:
-   - Total Patients count
-   - Gender distribution (Male/Female)
-   - Age distribution chart
-
-3. **Configure Export**:
-   
-   **Export Format:**
-   - CSV (Excel Compatible) - for analysis software
-   - Excel (.xlsx) - formatted with headers
-
-   **Data Privacy Level** (Administrator only):
-   - Anonymized (Person Hash, no names/MBO)
-   - Sensitive (Includes Patient Names & MBO)
-
-   **Data to Include:**
-   - ☑ Basic Demographics (always included)
-   - ☐ Main Ocular Conditions
-   - ☐ Other Ocular Conditions (ICD-10)
-   - ☐ Previous Surgeries & Laser Treatments
-   - ☐ Systemic Conditions
-   - ☐ Medications (Ocular & Systemic)
-
-   **Date Range** (Optional):
-   - From Date: Start of range
-   - To Date: End of range
-
-4. **Click "Export Data"** → File downloads automatically
-
-5. **Open in Excel/LibreOffice**:
-   - CSV: Plain format, universal compatibility
-   - XLSX: Formatted headers, professional appearance
-
-### Workflow 4: Managing Reference Data (Administrator)
-
-1. **Dashboard** → Click **"Settings"**
-
-2. **Select Reference Type**:
-   - ICD-10 Ocular Conditions
-   - ICD-10 Systemic Conditions
-   - Medications
-   - Surgical Procedures
-
-3. **For Any Reference Type**:
-   
-   **Add New Entry:**
-   - Click **"+ Add New [Type]"**
-   - Enter code/name
-   - Enter description
-   - Select/enter category (optional)
-   - Click "Create"
-
-   **Edit Existing:**
-   - Click **"Edit"** on any row
-   - Modify description or category
-   - Code/name is read-only
-   - Click "Update"
-
-   **Deactivate/Activate:**
-   - Click **"Deactivate"** to hide from dropdowns
-   - Click **"Activate"** to restore
-   - Never deletes (preserves existing patient data references)
-
-   **Search:**
-   - Type in search bar
-   - Real-time filtering by code or description
-
-### Workflow 5: Managing Users (Administrator)
-
-1. **Dashboard** → Click **"Settings"** → Click **"User Management"**
-
-2. **View User Statistics**:
-   - Total Users
-   - Administrators count
-   - Staff Members count
-
-3. **Create New User**:
-   - Click **"+ Add New User"**
-   - Enter username
-   - Enter email (optional)
-   - Enter password (min 6 characters)
-   - Select role: Staff or Administrator
-   - Click "Create User"
-
-4. **Edit Existing User**:
-   - Click **"Edit"** on user row
-   - Modify username, email, or role
-   - Optionally enter new password
-   - Click "Update User"
-
-5. **Reset Password**:
-   - Click **"Reset Password"**
-   - Confirm action
-   - Password reset to: password123
-   - User should change on next login
-
-6. **Delete User**:
-   - Click **"Delete"** (not available for your own account)
-   - Confirm action
-   - User permanently removed
-
-## 🗂️ Reference Data Format
-
-### ICD-10 Codes (Both Ocular and Systemic)
-```
-Code: H35.31
-Description: Nonexudative age-related macular degeneration
-Category: Retina
-Status: Active
-```
-
-### Medications
-```
-Trade Name: Cosopt
-Generic Name: Dorzolamide/Timolol
-Type: Ocular
-Status: Active
-```
-
-### Surgeries
-```
-Code: Phaco+IOL
-Description: Phacoemulsification with intraocular lens implantation
-Category: Cataract Surgery
-Status: Active
-```
-
-## 📈 Implementation Status
-
-### ✅ Completed Features
-
-**Core Functionality:**
-- ✅ Complete database schema with all tables
-- ✅ User authentication system
-- ✅ Role-based access control (Administrator, Staff)
-- ✅ Dashboard with all main actions
-
-**Patient Management:**
-- ✅ Patient ID generation and validation
-- ✅ Complete new patient form with all 40+ ocular condition fields
-- ✅ Dynamic form field showing/hiding based on selections
-- ✅ Multiple entry addition for conditions, surgeries, medications
-- ✅ Patient search and editing interface
-- ✅ Concurrent editing prevention
-
-**Data Export:**
-- ✅ CSV export functionality
-- ✅ Excel (XLSX) export with formatting
-- ✅ Role-based export access (sensitive vs anonymized)
-- ✅ Flexible data filtering (date range, data types)
-- ✅ Dynamic column generation for variable-length data
-- ✅ Proper column ordering matching form layout
-
-**Reference Data Management:**
-- ✅ ICD-10 Ocular Conditions management
-- ✅ ICD-10 Systemic Conditions management
-- ✅ Medications management
-- ✅ Surgical Procedures management
-- ✅ Add/Edit/Deactivate functionality
-- ✅ Real-time search and filtering
-
-**User Management:**
-- ✅ User creation and editing
-- ✅ Password reset functionality
-- ✅ User deletion with protection
-- ✅ Role assignment
-- ✅ User statistics display
-
-**Security & Validation:**
-- ✅ Password hashing (Bcrypt)
-- ✅ Session management
-- ✅ Real-time form validation
-- ✅ Duplicate patient ID prevention
-- ✅ Server-side export access control
-
-### 🔮 Possible Future Enhancements
-
-**Analytics & Reporting:**
-- Advanced statistical analysis tools
-- Custom report generation
-- Data visualization dashboards
-- Trend analysis over time
-
-**Integration:**
-- Integration with lab systems
-- HL7/FHIR compliance
-- Electronic health record (EHR) integration
-- Automated data import from other systems
-
-**User Experience:**
-- Mobile application for data entry
-- Offline mode with synchronization
-- Batch patient import
-- Template-based data entry
-
-**Advanced Features:**
-- Machine learning predictions
-- Automated quality checks
-- Multi-language support
-- Advanced search with filters
-- Patient data versioning/history
-- Audit logging with detailed trails
-
-**Security & Compliance:**
-- Two-factor authentication
-- Data encryption at rest
-- HTTPS/TLS enforcement
-- HIPAA compliance tools
-- GDPR compliance features
-- Session timeout management
-- IP allowlisting
-
-**Collaboration:**
-- Real-time collaboration features
-- Comments and annotations
-- Data review workflow
-- Approval processes
-
-## 🛠️ Technical Stack
-
-**Backend:**
-- Python 3.9+
-- Flask 3.0 (Web framework)
-- Flask-Bcrypt (Password hashing)
-- psycopg2 (PostgreSQL adapter)
-
-**Database:**
-- PostgreSQL 15+
-- Complex relational schema
-- Foreign key constraints
-- Automatic timestamp tracking
-
-**Frontend:**
-- HTML5
-- CSS3 (Custom styling, no frameworks)
-- Vanilla JavaScript (No jQuery or frameworks)
-- Responsive design
-
-**Export:**
-- openpyxl (Excel generation)
-- CSV module (Python standard library)
+### 8. Advanced Search & Filtering
+
+#### Patient Search
+- Search by Patient ID
+- Search by Name
+- Search by MBO
+- Recent patients list (20 most recent)
+
+#### Advanced Filters
+- **Main Ocular Conditions**: Filter by glaucoma, diabetic retinopathy, lens status, macular edema, macular degeneration, epiretinal membrane
+- **Other Conditions**: Filter by presence/absence of additional ocular conditions
+- **Surgeries**: Filter by surgical history
+- **Medications**: Filter by ocular or systemic medications
+- **Combination Filters**: Apply multiple filters simultaneously
 
 ## 🐳 Docker Deployment
 
-Docker configuration available for:
-- PostgreSQL container
-- Flask application container
-- Nginx reverse proxy
-- Persistent data volumes
-- Network configuration
+The project includes complete Docker configuration:
 
-See `docker-compose.yml` for complete setup.
+### Docker Compose Setup
+```yaml
+services:
+  web:
+    - Flask application with Gunicorn
+    - Health checks
+    - Auto-restart
+    - Volume mounts for backups
+  
+  nginx:
+    - Reverse proxy
+    - SSL ready (commented configuration included)
+    - Port 8088 for HTTP
+    - Port 8443 for HTTPS (when configured)
+```
 
-## 🔧 Development
+### Production Configuration
+- **Gunicorn**: Multi-worker setup with auto-restart
+- **Nginx**: Reverse proxy with security headers
+- **Health Checks**: Automatic service monitoring
+- **Persistent Storage**: Volumes for backups and uploads
+- **Network Isolation**: Dedicated Docker network
+
+### Deployment
+```bash
+# Start all services
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Rebuild after changes
+docker-compose up -d --build
+```
+
+## 📊 Database Statistics
+
+A production instance can handle:
+- **Patients**: Up to 99,999 (with 5-digit IDs)
+- **Conditions per patient**: Unlimited
+- **Medications per patient**: Unlimited
+- **Surgeries per patient**: Unlimited
+- **Concurrent users**: 50+ (with proper PostgreSQL tuning)
+- **ICD-10 Codes**: 1000s supported via bulk import
+- **Medications**: 1000s supported via bulk import
+
+## 🤝 Best Practices
+
+### Data Entry
+1. Always double-check Patient ID before saving
+2. Use consistent naming conventions for patients
+3. Verify MBO numbers are correct (9 digits)
+4. Complete all applicable sections
+5. Use "ND" (No Data) when information is unavailable
+
+### Reference Data Management
+1. Use bulk import for large datasets (Excel/CSV)
+2. Never permanently delete reference data (use Deactivate instead)
+3. Use clear, descriptive names
+4. Organize by categories
+5. Keep codes consistent with international standards
+6. Export before making major changes
+
+### User Management
+1. Change default passwords immediately
+2. Use strong passwords (min 8 chars, mixed case, numbers, symbols)
+3. Regularly review user access levels
+4. Remove inactive users promptly
+
+### Data Export
+1. Use filters to export specific patient cohorts
+2. Use anonymized exports for statistical analysis
+3. Only export sensitive data when necessary
+4. Secure exported files appropriately
+5. Delete exported files after use
+6. Document export parameters for reproducibility
+
+### Backup & Restore
+1. Schedule automatic backups (daily recommended)
+2. Store backups on external drives or network storage
+3. Test restore procedures periodically
+4. Keep multiple backup versions (retention policy)
+5. Always create a backup before major changes
+6. Verify backup location has sufficient space
+
+## 🧪 Development
 
 ### Adding New Condition Fields
 
@@ -831,13 +609,13 @@ tail -f app.log
 # Open multiple browser sessions
 ```
 
-## 📝 Configuration
+## 📁 Configuration
 
 ### Environment Variables (.env)
 
 ```env
 # Database Configuration
-DB_NAME=raman_research
+DB_NAME=raman_research_prod
 DB_USER=postgres
 DB_PASSWORD=your_secure_password
 DB_HOST=localhost
@@ -846,6 +624,13 @@ DB_PORT=5432
 # Application Configuration
 SECRET_KEY=your-random-secret-key-min-32-chars
 FLASK_ENV=production
+
+# Patient ID Configuration
+STARTING_PATIENT_ID=1500
+
+# Backup Configuration
+BACKUP_DIR=/mnt/medical_backups/raman_backups
+BACKUP_RETENTION_DAYS=90
 
 # Optional: For development
 DEBUG=False
@@ -865,7 +650,7 @@ shared_buffers = 256MB
 effective_cache_size = 1GB
 ```
 
-## 🔍 Troubleshooting
+## 🔧 Troubleshooting
 
 ### Common Issues
 
@@ -876,7 +661,7 @@ Error: could not connect to server
 **Solution:** Check PostgreSQL is running and .env credentials are correct
 ```bash
 sudo systemctl status postgresql
-psql -U postgres -d raman_research
+psql -U postgres -d raman_research_prod
 ```
 
 **2. Patient ID Already Exists**
@@ -894,17 +679,31 @@ Export file has no data
 - Verify patients exist in selected date range
 - Ensure at least one data type checkbox is selected
 
-**4. Cannot Install openpyxl**
+**4. Cannot Install Dependencies**
 ```
-Error: Failed building wheel for openpyxl
+Error: Failed building wheel for psycopg2
 ```
 **Solution:** 
 ```bash
-pip install --upgrade pip
-pip install openpyxl --no-cache-dir
+# Install PostgreSQL development headers
+sudo apt-get install libpq-dev python3-dev
+
+# Or use binary package
+pip install psycopg2-binary
 ```
 
-**5. Form Fields Not Showing/Hiding**
+**5. Backup Directory Not Writable**
+```
+Error: Permission denied
+```
+**Solution:**
+```bash
+# Create directory with proper permissions
+sudo mkdir -p /mnt/medical_backups/raman_backups
+sudo chown $USER:$USER /mnt/medical_backups/raman_backups
+```
+
+**6. Form Fields Not Showing/Hiding**
 ```
 Conditional fields don't appear
 ```
@@ -912,43 +711,6 @@ Conditional fields don't appear
 - Check browser console for JavaScript errors
 - Verify JavaScript is enabled
 - Clear browser cache
-
-## 📊 Database Statistics
-
-A production instance can handle:
-- **Patients**: Theoretically up to 99,999 (with 5-digit IDs)
-- **Conditions per patient**: Unlimited
-- **Medications per patient**: Unlimited
-- **Surgeries per patient**: Unlimited
-- **Concurrent users**: 50+ (with proper PostgreSQL tuning)
-
-## 🤝 Best Practices
-
-### Data Entry
-1. Always double-check Patient ID before saving
-2. Use consistent naming conventions for patients
-3. Verify MBO numbers are correct (9 digits)
-4. Complete all applicable sections
-5. Use "ND" (No Data) when information is unavailable
-
-### Reference Data Management
-1. Never delete reference data (use Deactivate instead)
-2. Use clear, descriptive names
-3. Organize by categories
-4. Keep codes consistent with international standards
-
-### User Management
-1. Change default passwords immediately
-2. Use strong passwords (min 8 chars, mixed case, numbers, symbols)
-3. Regularly review user access levels
-4. Remove inactive users promptly
-
-### Data Export
-1. Use anonymized exports for statistical analysis
-2. Only export sensitive data when necessary
-3. Secure exported files appropriately
-4. Delete exported files after use
-5. Document export parameters for reproducibility
 
 ## 📄 License
 
@@ -964,23 +726,9 @@ For technical issues:
 5. Ensure all dependencies are installed
 6. Verify user has appropriate role/permissions
 
-## 🎓 Training Resources
-
-### For Administrators
-- User management guide
-- Reference data import procedures
-- Export configuration best practices
-- Database backup and maintenance
-
-### For Staff
-- Patient data entry tutorial
-- Form field descriptions
-- Search and edit procedures
-- Export functionality guide
-
 ---
 
 **Version:** 1.0  
-**Last Updated:** November 2025  
+**Last Updated:** December 2025  
 **Status:** Production Ready  
 **Database Schema Version:** 1.0
