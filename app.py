@@ -4419,11 +4419,18 @@ def api_surgeries():
 
         elif request.method == 'POST':
             data = request.get_json()
+            surgery_code = data.get('code') or data.get('surgery_code')
+
+            if not surgery_code:
+                cur.close()
+                conn.close()
+                return jsonify({'error': 'Surgery code is required'}), 400
+
             cur.execute('''
                 INSERT INTO surgeries (code, description, category, active)
                 VALUES (%s, %s, %s, %s)
                 RETURNING *
-            ''', (data['code'], data['description'], data.get('category', ''), data.get('active', True)))
+            ''', (surgery_code, data['description'], data.get('category', ''), data.get('active', True)))
             new_surgery = cur.fetchone()
             conn.commit()
             cur.close()
