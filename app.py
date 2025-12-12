@@ -741,16 +741,30 @@ def calculate_age(date_of_birth, date_of_sample):
 
 
 def get_next_available_patient_id():
-    """Get next available patient ID based on highest existing ID in database"""
+    """Get next available patient ID - finds the lowest available ID starting from STARTING_PATIENT_ID"""
     conn = get_db_connection()
     if not conn:
         return None
     try:
         cur = conn.cursor()
-        # Get the highest patient_id currently in use
-        cur.execute("SELECT COALESCE(MAX(patient_id), %s) FROM patients_sensitive", (STARTING_PATIENT_ID - 1,))
-        max_id = cur.fetchone()[0]
-        next_id = max_id + 1
+
+        # Find the smallest available ID starting from STARTING_PATIENT_ID
+        # This query finds gaps in the sequence
+        cur.execute("""
+            SELECT COALESCE(
+                (SELECT MIN(t1.patient_id + 1)
+                 FROM patients_sensitive t1
+                 WHERE NOT EXISTS (
+                     SELECT 1 FROM patients_sensitive t2
+                     WHERE t2.patient_id = t1.patient_id + 1
+                 )
+                 AND t1.patient_id >= %s),
+                %s
+            ) AS next_id
+        """, (STARTING_PATIENT_ID, STARTING_PATIENT_ID))
+
+        result = cur.fetchone()
+        next_id = result[0] if result else STARTING_PATIENT_ID
 
         # Make sure we don't exceed the maximum allowed ID
         if next_id > 99999:
@@ -2354,6 +2368,59 @@ def edit_patient(patient_id):
         if conn:
             conn.close()
         return redirect(url_for('edit_patient', patient_id=patient_id))
+
+
+@app.route('/delete-patient/<int:patient_id>', methods=['POST'])
+@staff_or_admin_required
+def delete_patient(patient_id):
+    """Delete a patient and all associated data"""
+    conn = get_db_connection()
+    if not conn:
+        flash('Database connection error', 'error')
+        return redirect(url_for('validate_data'))
+
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        # Get patient name for confirmation message
+        cur.execute('SELECT patient_name FROM patients_sensitive WHERE patient_id = %s', (patient_id,))
+        patient = cur.fetchone()
+
+        if not patient:
+            flash(f'Patient #{patient_id} not found', 'error')
+            cur.close()
+            conn.close()
+            return redirect(url_for('validate_data'))
+
+        patient_name = patient['patient_name']
+
+        # Delete patient (CASCADE will handle related records)
+        # This will delete from:
+        # - patients_sensitive (main table)
+        # - patients_statistical (CASCADE)
+        # - ocular_conditions (CASCADE)
+        # - other_ocular_conditions (CASCADE)
+        # - previous_ocular_surgeries (CASCADE)
+        # - systemic_conditions (CASCADE)
+        # - ocular_medications (CASCADE)
+        # - systemic_medications (CASCADE)
+        cur.execute('DELETE FROM patients_sensitive WHERE patient_id = %s', (patient_id,))
+
+        conn.commit()
+        cur.close()
+        conn.close()
+
+        flash(
+            f'Patient #{patient_id:05d} - {patient_name} has been permanently deleted. The ID is now available for reuse.',
+            'success')
+        return redirect(url_for('validate_data'))
+
+    except Exception as e:
+        if conn:
+            conn.rollback()
+            conn.close()
+        flash(f'Error deleting patient: {str(e)}', 'error')
+        return redirect(url_for('validate_data'))
 
 
 # Export Data Route

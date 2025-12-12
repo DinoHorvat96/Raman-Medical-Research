@@ -239,6 +239,24 @@
         font-size: 12px;
         font-weight: 600;
     }
+
+    .delete-btn {
+        padding: 8px 16px;
+        background: #e74c3c;
+        color: white;
+        text-decoration: none;
+        border: none;
+        border-radius: 4px;
+        font-size: 13px;
+        transition: all 0.3s;
+        display: inline-block;
+        cursor: pointer;
+    }
+
+    .delete-btn:hover {
+        background: #c0392b;
+        transform: translateY(-1px);
+    }
 </style>
 
 <div class="search-box">
@@ -458,7 +476,7 @@
                 <th>Sample Collection</th>
                 <th>Sex</th>
                 <th>Eye</th>
-                <th>Action</th>
+                <th>Actions</th>
             </tr>
         </thead>
         <tbody>
@@ -475,9 +493,16 @@
                     <span class="badge badge-eye">{{ patient.eye }}</span>
                 </td>
                 <td>
-                    <a href="{{ url_for('edit_patient', patient_id=patient.patient_id) }}" class="edit-btn">
-                        ✏️ Edit
-                    </a>
+                    <div style="display: flex; gap: 8px;">
+                        <a href="{{ url_for('edit_patient', patient_id=patient.patient_id) }}" class="edit-btn">
+                            ✏️ Edit
+                        </a>
+                        <button onclick="deletePatient({{ patient.patient_id }}, '{{ patient.patient_name }}')"
+                                class="delete-btn"
+                                title="Delete Patient">
+                            🗑️ Delete
+                        </button>
+                    </div>
                 </td>
             </tr>
             {% endfor %}
@@ -530,6 +555,25 @@ function clearFilters() {
 
     // Submit the form to clear filters
     document.getElementById('filterForm').submit();
+}
+
+function deletePatient(patientId, patientName) {
+    // First confirmation
+    if (!confirm(`⚠️ WARNING: Delete Patient?\n\nPatient ID: ${patientId}\nName: ${patientName}\n\nThis will permanently delete:\n• Patient information\n• All medical conditions\n• All medications\n• All surgical history\n• All related data\n\nThe ID will become available for reuse.\n\nAre you sure?`)) {
+        return;
+    }
+
+    // Second confirmation for safety
+    if (!confirm(`FINAL CONFIRMATION\n\nThis action CANNOT be undone!\n\nDelete patient #${patientId} - ${patientName}?`)) {
+        return;
+    }
+
+    // Create and submit form
+    const form = document.createElement('form');
+    form.method = 'POST';
+    form.action = `/delete-patient/${patientId}`;
+    document.body.appendChild(form);
+    form.submit();
 }
 
 // Auto-open filters if they're active
