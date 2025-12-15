@@ -32,3 +32,4 @@ venv.bak/
 *.swo
 *~
 .DS_Store
+*.bkp
