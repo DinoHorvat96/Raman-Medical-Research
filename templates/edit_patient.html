@@ -750,13 +750,13 @@
                         <div class="form-group">
                             <label>ICD-10 Code</label>
                             <select name="systemic_condition[]">
-                                <option value="0">0</option>
+                                <option value="0" {% if condition.icd10_code == '0' %}selected{% endif %}>0</option>
                                 <option value="ND" {% if condition.icd10_code == 'ND' %}selected{% endif %}>ND</option>
-                                <option value="E10" {% if condition.icd10_code == 'E10' %}selected{% endif %}>E10 - Type 1 diabetes</option>
-                                <option value="E11" {% if condition.icd10_code == 'E11' %}selected{% endif %}>E11 - Type 2 diabetes</option>
-                                <option value="I10" {% if condition.icd10_code == 'I10' %}selected{% endif %}>I10 - Hypertension</option>
-                                <option value="I50" {% if condition.icd10_code == 'I50' %}selected{% endif %}>I50 - Heart failure</option>
-                                <option value="N18" {% if condition.icd10_code == 'N18' %}selected{% endif %}>N18 - Chronic kidney disease</option>
+                                {% for code in icd10_systemic %}
+                                <option value="{{ code.code }}" {% if condition.icd10_code == code.code %}selected{% endif %}>
+                                    {{ code.code }}{% if code.description %} - {{ code.description }}{% endif %}
+                                </option>
+                                {% endfor %}
                             </select>
                         </div>
                         {% if not loop.first %}

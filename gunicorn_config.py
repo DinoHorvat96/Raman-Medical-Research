@@ -17,7 +17,7 @@ worker_connections = 1000
 # Worker lifecycle
 max_requests = 1000  # Restart worker after this many requests (prevents memory leaks)
 max_requests_jitter = 50  # Add randomness to prevent simultaneous restarts
-timeout = 15  # Request timeout in seconds (increase for long-running operations)
+timeout = 120  # Request timeout in seconds (large exports can exceed the old 15s and get the worker killed)
 graceful_timeout = 30  # Time to wait for workers to finish before force kill
 keepalive = 2  # Keep-alive connections
 

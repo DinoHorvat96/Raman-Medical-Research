@@ -2944,33 +2944,35 @@ def export_data():
                 # Generate Excel file
                 try:
                     from openpyxl import Workbook
+                    from openpyxl.cell import WriteOnlyCell
                     from openpyxl.styles import Font, PatternFill, Alignment
-                    from openpyxl.utils import get_column_letter
 
-                    wb = Workbook()
-                    ws = wb.active
-                    ws.title = "Patient Data"
+                    # write_only mode streams rows to disk instead of keeping a Cell
+                    # object for every cell in memory. With one binary column per
+                    # ICD-10 code / surgery / medication the column count runs into
+                    # the thousands, so the standard workbook can exhaust memory and
+                    # blow past the request timeout on large exports.
+                    wb = Workbook(write_only=True)
+                    ws = wb.create_sheet("Patient Data")
 
                     if export_data:
                         # Write headers
                         header_fill = PatternFill(start_color="3498db", end_color="3498db", fill_type="solid")
                         header_font = Font(bold=True, color="FFFFFF")
+                        header_alignment = Alignment(horizontal='center')
 
-                        for col_idx, fieldname in enumerate(final_columns, 1):
-                            cell = ws.cell(row=1, column=col_idx, value=fieldname)
+                        header_cells = []
+                        for fieldname in final_columns:
+                            cell = WriteOnlyCell(ws, value=fieldname)
                             cell.fill = header_fill
                             cell.font = header_font
-                            cell.alignment = Alignment(horizontal='center')
+                            cell.alignment = header_alignment
+                            header_cells.append(cell)
+                        ws.append(header_cells)
 
-                        # Write data
-                        for row_idx, data_row in enumerate(export_data, 2):
-                            for col_idx, fieldname in enumerate(final_columns, 1):
-                                value = data_row.get(fieldname, '')
-                                ws.cell(row=row_idx, column=col_idx, value=value)
-
-                        # Auto-adjust column widths
-                        for col_idx in range(1, len(final_columns) + 1):
-                            ws.column_dimensions[get_column_letter(col_idx)].width = 15
+                        # Write data (one row at a time, in column order)
+                        for data_row in export_data:
+                            ws.append([data_row.get(fieldname, '') for fieldname in final_columns])
 
                     # Save to BytesIO
                     excel_output = io.BytesIO()
