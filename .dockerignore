@@ -1,0 +1,35 @@
+# Runtime data — must NOT be in the build context.
+# postgres_data is owned by the postgres user with 0700 perms, so including it
+# causes "permission denied" when Docker reads the build context.
+postgres_data/
+backups/
+exports/
+uploads/
+
+# Secrets — never bake into the image (provided at runtime via env / bind mount).
+.env
+*.env
+!.env.example
+
+# Version control / IDE
+.git/
+.gitignore
+.idea/
+.vscode/
+
+# Python
+.venv/
+venv/
+env/
+ENV/
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Misc
+*.bkp
+*.swp
+*.swo
+*~
+.DS_Store
+docker-compose.yml.bkp
