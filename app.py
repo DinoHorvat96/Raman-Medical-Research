@@ -15,6 +15,8 @@ import json
 import threading
 import schedule
 import time
+import uuid
+import traceback
 from pathlib import Path
 import pandas as pd
 from werkzeug.middleware.proxy_fix import ProxyFix
@@ -54,9 +56,31 @@ BACKUP_CONFIG_FILE = os.getenv('BACKUP_CONFIG_FILE', 'backup_config.json')
 DEFAULT_BACKUP_DIR = os.getenv('BACKUP_DIRECTORY', '/backups')
 DEFAULT_RETENTION_DAYS = int(os.getenv('BACKUP_RETENTION_DAYS', '90'))
 
+# Background export configuration
+# Directory where generated export files are stored (shared between the web
+# container and the export worker container via a volume). Falls back to a
+# local folder for development.
+EXPORT_DIRECTORY = os.getenv('EXPORT_DIRECTORY', '/exports' if os.path.isdir('/exports') else os.path.join(os.getcwd(), 'exports'))
+# How long a finished export file is kept before the sweeper deletes it.
+EXPORT_RETENTION_HOURS = int(os.getenv('EXPORT_RETENTION_HOURS', '24'))
+# A 'running' job whose heartbeat is older than this is considered dead (its
+# worker crashed) and is reset to 'pending' so it can be retried.
+EXPORT_STALE_MINUTES = int(os.getenv('EXPORT_STALE_MINUTES', '30'))
+# Rows fetched/built per chunk while streaming an export.
+EXPORT_CHUNK_SIZE = int(os.getenv('EXPORT_CHUNK_SIZE', '500'))
+# Run an in-process worker thread to consume the export queue, so background
+# exports work without a separate worker process (development, or a single
+# process deploy). Set EXPORT_INLINE_WORKER=false when running the dedicated
+# export_worker container, so only that container processes jobs.
+EXPORT_INLINE_WORKER = os.getenv('EXPORT_INLINE_WORKER', 'true').lower() in ('1', 'true', 'yes', 'on')
+
 # Global scheduler variables
 scheduler_thread = None
 scheduler_running = False
+
+# In-process export worker thread state
+inline_export_thread = None
+inline_export_lock = threading.Lock()
 
 
 def create_database_if_not_exists():
@@ -311,6 +335,33 @@ def init_database():
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
+        ''')
+
+        # Background export jobs queue. Self-migrating: created automatically on
+        # startup if it does not already exist
+        cur.execute('''
+            CREATE TABLE IF NOT EXISTS export_jobs (
+                job_id           VARCHAR(36) PRIMARY KEY,
+                requested_by     INTEGER,
+                requested_by_name VARCHAR(50),
+                params           TEXT NOT NULL,
+                status           VARCHAR(20) NOT NULL DEFAULT 'pending',
+                rows_total       INTEGER,
+                rows_done        INTEGER NOT NULL DEFAULT 0,
+                file_path        TEXT,
+                file_name        TEXT,
+                error            TEXT,
+                cancel_requested BOOLEAN NOT NULL DEFAULT FALSE,
+                created_at       TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                started_at       TIMESTAMP,
+                finished_at      TIMESTAMP,
+                heartbeat_at     TIMESTAMP,
+                expires_at       TIMESTAMP
+            )
+        ''')
+        cur.execute('''
+            CREATE INDEX IF NOT EXISTS idx_export_jobs_status
+            ON export_jobs (status, created_at)
         ''')
 
         conn.commit()
@@ -1129,6 +1180,10 @@ def scheduled_backup():
             '-U', DB_CONFIG['user'],
             '-d', DB_CONFIG['dbname'],
             '-f', backup_file,
+            # Keep the export_jobs table structure but skip its rows: it is a
+            # transient job queue, and its rows reference regenerable export
+            # files that are not backed up.
+            '--exclude-table-data=export_jobs',
             '--no-password'
         ]
 
@@ -1448,6 +1503,17 @@ def initialize_app():
     print("\n" + "=" * 60)
     print("RAMAN MEDICAL RESEARCH DATABASE - Starting Up")
     print("=" * 60 + "\n")
+
+    # The export worker imports this module only to reuse the export functions.
+    # It must NOT initialize the database (create DB, create tables, populate
+    # reference data) or run the backup scheduler: doing so would race the web
+    # process at first boot (duplicate inserts, concurrent DDL) and double-run
+    # backups. The web service is the single authority for initialization, and
+    # docker-compose starts the worker only after web is healthy.
+    if os.getenv('RAMAN_ROLE') == 'worker':
+        print("Export worker process - skipping DB init & scheduler (handled by web)")
+        print("=" * 60 + "\n")
+        return
 
     # Step 1: Check/Create database
     print("Step 1: Checking database existence...")
@@ -2425,6 +2491,326 @@ def delete_patient(patient_id):
 
 # Export Data Route
 
+def export_safe_column_name(name):
+    """Convert any value into a safe export column name.
+
+    Shared by the live export route and the background export worker so both
+    produce an identical column set. Keep this byte-for-byte stable.
+    """
+    safe = str(name).lower()
+    safe = safe.replace(' ', '_')
+    safe = safe.replace('/', '_')
+    safe = safe.replace('-', '_')
+    safe = safe.replace('.', '_')
+    safe = safe.replace('(', '')
+    safe = safe.replace(')', '')
+    safe = safe.replace('+', '_')
+    safe = ''.join(c if c.isalnum() or c == '_' else '' for c in safe)
+    if safe and safe[0].isdigit():
+        safe = 'x_' + safe
+    return safe
+
+
+def build_export_plan(conn, params):
+    """Build the binary-format column layout + base SQL for an export.
+
+    `params` is a plain dict so the same code serves both the live route
+    (request.form-derived) and a background job (JSON-stored):
+        allow_sensitive, include_conditions, include_other_conditions,
+        include_surgeries, include_systemic, include_medications,
+        date_from, date_to, filters (dict of filter_* fields)
+
+    Returns a `plan` dict consumed by iter_export_rows(). This is the single
+    source of truth for export layout — synchronous and background exports are
+    therefore guaranteed identical.
+    """
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        allow_sensitive = bool(params.get('allow_sensitive'))
+        include_conditions = bool(params.get('include_conditions'))
+        include_other_conditions = bool(params.get('include_other_conditions'))
+        include_surgeries = bool(params.get('include_surgeries'))
+        include_systemic = bool(params.get('include_systemic'))
+        include_medications = bool(params.get('include_medications'))
+        filters = params.get('filters') or {}
+
+        # ---- Reference data (active OR used by any patient) ----
+        cur.execute('''
+            SELECT DISTINCT generic_name FROM (
+                SELECT generic_name FROM medications WHERE active = TRUE
+                UNION SELECT DISTINCT generic_name FROM ocular_medications
+                UNION SELECT DISTINCT generic_name FROM systemic_medications
+            ) AS all_meds ORDER BY generic_name
+        ''')
+        all_medications = [r['generic_name'] for r in cur.fetchall()]
+
+        all_generic_components = get_all_generic_components()
+        sorted_generic_components = sorted(all_generic_components)
+
+        cur.execute('''
+            SELECT DISTINCT code FROM (
+                SELECT code FROM icd10_ocular_conditions WHERE active = TRUE
+                UNION SELECT DISTINCT icd10_code AS code FROM other_ocular_conditions
+            ) AS all_codes ORDER BY code
+        ''')
+        all_ocular_codes = [r['code'] for r in cur.fetchall()]
+
+        cur.execute('''
+            SELECT DISTINCT code FROM (
+                SELECT code FROM icd10_systemic_conditions WHERE active = TRUE
+                UNION SELECT DISTINCT icd10_code AS code FROM systemic_conditions
+            ) AS all_codes ORDER BY code
+        ''')
+        all_systemic_codes = [r['code'] for r in cur.fetchall()]
+
+        cur.execute('''
+            SELECT DISTINCT code FROM (
+                SELECT code FROM surgeries WHERE active = TRUE
+                UNION SELECT DISTINCT surgery_code AS code FROM previous_ocular_surgeries
+            ) AS all_surgeries ORDER BY code
+        ''')
+        all_surgeries = [r['code'] for r in cur.fetchall()]
+
+        # ---- Base query ----
+        if allow_sensitive:
+            base_query = '''
+                SELECT ps.patient_id, ps.patient_name, ps.mbo, pst.sex,
+                       ps.date_of_birth, ps.date_of_sample_collection, pst.eye,
+                       pst.person_hash, pst.age'''
+        else:
+            base_query = '''
+                SELECT ps.patient_id, pst.person_hash, pst.sex, pst.eye, pst.age'''
+
+        if include_conditions:
+            base_query += ''',
+                oc.lens_status, oc.locs_iii_no, oc.locs_iii_nc, oc.locs_iii_c, oc.locs_iii_p,
+                oc.iol_type, oc.etiology_aphakia, oc.glaucoma, oc.oht_or_pac, oc.etiology_glaucoma,
+                oc.steroid_responder, oc.pxs, oc.pds, oc.diabetic_retinopathy, oc.stage_diabetic_retinopathy,
+                oc.stage_npdr, oc.stage_pdr, oc.macular_edema, oc.etiology_macular_edema,
+                oc.macular_degeneration_dystrophy, oc.etiology_macular_deg_dyst, oc.stage_amd,
+                oc.exudation_amd, oc.stage_other_macular_deg, oc.exudation_other_macular_deg,
+                oc.macular_hole_vmt, oc.etiology_mh_vmt, oc.cause_secondary_mh_vmt,
+                oc.treatment_status_mh_vmt, oc.epiretinal_membrane, oc.etiology_erm,
+                oc.cause_secondary_erm, oc.treatment_status_erm, oc.retinal_detachment,
+                oc.etiology_rd, oc.treatment_status_rd, oc.pvr, oc.vitreous_haemorrhage_opacification,
+                oc.etiology_vitreous_haemorrhage'''
+
+        base_query += '''
+            FROM patients_sensitive ps
+            JOIN patients_statistical pst ON ps.patient_id = pst.patient_id'''
+        if include_conditions:
+            base_query += ' LEFT JOIN ocular_conditions oc ON ps.patient_id = oc.patient_id'
+        base_query += ' WHERE 1=1'
+
+        sql_params = []
+        if params.get('date_from'):
+            base_query += ' AND ps.date_of_sample_collection >= %s'
+            sql_params.append(params['date_from'])
+        if params.get('date_to'):
+            base_query += ' AND ps.date_of_sample_collection <= %s'
+            sql_params.append(params['date_to'])
+
+        filter_clause, filter_params = build_filter_clause(filters)
+        base_query += filter_clause
+        sql_params.extend(filter_params)
+        base_query += ' ORDER BY ps.patient_id'
+
+        # ---- Column layout (BINARY format) ----
+        if allow_sensitive:
+            final_columns = ['patient_id', 'patient_name', 'mbo', 'sex', 'date_of_birth',
+                             'date_of_sample_collection', 'eye', 'person_hash', 'age']
+        else:
+            final_columns = ['patient_id', 'person_hash', 'sex', 'eye', 'age']
+
+        if include_conditions:
+            final_columns.extend([
+                'lens_status', 'locs_iii_no', 'locs_iii_nc', 'locs_iii_c', 'locs_iii_p',
+                'iol_type', 'etiology_aphakia', 'glaucoma', 'oht_or_pac', 'etiology_glaucoma',
+                'steroid_responder', 'pxs', 'pds', 'diabetic_retinopathy', 'stage_diabetic_retinopathy',
+                'stage_npdr', 'stage_pdr', 'macular_edema', 'etiology_macular_edema',
+                'macular_degeneration_dystrophy', 'etiology_macular_deg_dyst', 'stage_amd',
+                'exudation_amd', 'stage_other_macular_deg', 'exudation_other_macular_deg',
+                'macular_hole_vmt', 'etiology_mh_vmt', 'cause_secondary_mh_vmt',
+                'treatment_status_mh_vmt', 'epiretinal_membrane', 'etiology_erm',
+                'cause_secondary_erm', 'treatment_status_erm', 'retinal_detachment',
+                'etiology_rd', 'treatment_status_rd', 'pvr', 'vitreous_haemorrhage_opacification',
+                'etiology_vitreous_haemorrhage'])
+
+        if include_other_conditions:
+            for code in all_ocular_codes:
+                s = export_safe_column_name(code)
+                final_columns.append(f'other_ocular_{s}')
+                final_columns.append(f'other_ocular_{s}_eye')
+        if include_surgeries:
+            for surgery in all_surgeries:
+                s = export_safe_column_name(surgery)
+                final_columns.append(f'surgery_{s}')
+                final_columns.append(f'surgery_{s}_eye')
+        if include_systemic:
+            for code in all_systemic_codes:
+                final_columns.append(f'systemic_{export_safe_column_name(code)}')
+        if include_medications:
+            for med in all_medications:
+                s = export_safe_column_name(med)
+                final_columns.append(f'ocular_med_{s}')
+                final_columns.append(f'ocular_med_{s}_eye')
+                final_columns.append(f'ocular_med_{s}_days')
+            for med in all_medications:
+                s = export_safe_column_name(med)
+                final_columns.append(f'systemic_med_{s}')
+                final_columns.append(f'systemic_med_{s}_days')
+            for gc in sorted_generic_components:
+                final_columns.append(f'takes_{export_safe_column_name(gc)}')
+
+        return {
+            'final_columns': final_columns,
+            'base_query': base_query,
+            'sql_params': sql_params,
+            'include_other_conditions': include_other_conditions,
+            'include_surgeries': include_surgeries,
+            'include_systemic': include_systemic,
+            'include_medications': include_medications,
+            'all_generic_components': all_generic_components,
+        }
+    finally:
+        cur.close()
+
+
+def count_export_rows(conn, plan):
+    """Return the number of patient rows the export will produce."""
+    cur = conn.cursor()
+    try:
+        cur.execute('SELECT COUNT(*) FROM (' + plan['base_query'] + ') AS _c', plan['sql_params'])
+        return cur.fetchone()[0]
+    finally:
+        cur.close()
+
+
+def iter_export_rows(conn, plan, chunk_size=None, progress_cb=None, cancel_cb=None):
+    """Yield binary-format export rows one at a time.
+
+    Patients are read through a server-side (named) cursor and each chunk's
+    related data is preloaded with a few ANY(%s) queries, so peak memory is
+    proportional to chunk_size rather than the total patient count. Does NOT
+    close `conn` — the caller owns the connection.
+
+    progress_cb(rows_done) is invoked after each chunk; cancel_cb() is checked
+    before each chunk and, if it returns True, iteration stops early.
+    """
+    if chunk_size is None:
+        chunk_size = EXPORT_CHUNK_SIZE
+
+    final_columns = plan['final_columns']
+    include_other_conditions = plan['include_other_conditions']
+    include_surgeries = plan['include_surgeries']
+    include_systemic = plan['include_systemic']
+    include_medications = plan['include_medications']
+    all_generic_components = plan['all_generic_components']
+
+    def _index_by_patient(rows):
+        grouped = {}
+        for related in rows:
+            grouped.setdefault(related['patient_id'], []).append(related)
+        return grouped
+
+    def build_row(patient, ocular_map, surgery_map, systemic_map, ocular_med_map, systemic_med_map):
+        row = {}
+        for col in final_columns:
+            if col in patient:
+                value = patient[col]
+                row[col] = value.strftime('%Y-%m-%d') if isinstance(value, (date, datetime)) else value
+            elif col.endswith('_eye') or col.endswith('_days'):
+                row[col] = 'ND'
+            elif col.startswith(('other_ocular_', 'surgery_', 'systemic_', 'ocular_med_', 'systemic_med_')):
+                row[col] = 0
+            else:
+                row[col] = ''
+        pid = patient['patient_id']
+        if include_other_conditions:
+            for cond in ocular_map.get(pid, []):
+                s = export_safe_column_name(cond['icd10_code'])
+                row[f'other_ocular_{s}'] = 1
+                row[f'other_ocular_{s}_eye'] = cond['eye']
+        if include_surgeries:
+            for surgery in surgery_map.get(pid, []):
+                s = export_safe_column_name(surgery['surgery_code'])
+                row[f'surgery_{s}'] = 1
+                row[f'surgery_{s}_eye'] = surgery['eye']
+        if include_systemic:
+            for cond in systemic_map.get(pid, []):
+                row[f'systemic_{export_safe_column_name(cond["icd10_code"])}'] = 1
+        if include_medications:
+            for med in ocular_med_map.get(pid, []):
+                s = export_safe_column_name(med['generic_name'])
+                row[f'ocular_med_{s}'] = 1
+                row[f'ocular_med_{s}_eye'] = med['eye']
+                row[f'ocular_med_{s}_days'] = med['last_application_days']
+            for med in systemic_med_map.get(pid, []):
+                s = export_safe_column_name(med['generic_name'])
+                row[f'systemic_med_{s}'] = 1
+                row[f'systemic_med_{s}_days'] = med['last_application_days']
+            patient_all_meds = [{'generic_name': m['generic_name']} for m in ocular_med_map.get(pid, [])]
+            patient_all_meds += [{'generic_name': m['generic_name']} for m in systemic_med_map.get(pid, [])]
+            for key, value in extract_generic_components_dynamic(patient_all_meds, all_generic_components).items():
+                if key in final_columns:
+                    row[key] = value
+        return row
+
+    # Unique cursor name so concurrent exports never collide.
+    stream_cur = conn.cursor(name='export_stream_' + uuid.uuid4().hex,
+                             cursor_factory=RealDictCursor)
+    stream_cur.itersize = chunk_size
+    preload_cur = conn.cursor(cursor_factory=RealDictCursor)
+    rows_done = 0
+    try:
+        stream_cur.execute(plan['base_query'], plan['sql_params'])
+        while True:
+            if cancel_cb is not None and cancel_cb():
+                break
+            chunk = stream_cur.fetchmany(chunk_size)
+            if not chunk:
+                break
+            chunk_ids = [p['patient_id'] for p in chunk]
+
+            ocular_map = {}
+            if include_other_conditions:
+                preload_cur.execute('SELECT patient_id, icd10_code, eye '
+                                    'FROM other_ocular_conditions WHERE patient_id = ANY(%s)', (chunk_ids,))
+                ocular_map = _index_by_patient(preload_cur.fetchall())
+            surgery_map = {}
+            if include_surgeries:
+                preload_cur.execute('SELECT patient_id, surgery_code, eye '
+                                    'FROM previous_ocular_surgeries WHERE patient_id = ANY(%s)', (chunk_ids,))
+                surgery_map = _index_by_patient(preload_cur.fetchall())
+            systemic_map = {}
+            if include_systemic:
+                preload_cur.execute('SELECT patient_id, icd10_code '
+                                    'FROM systemic_conditions WHERE patient_id = ANY(%s)', (chunk_ids,))
+                systemic_map = _index_by_patient(preload_cur.fetchall())
+            ocular_med_map = {}
+            systemic_med_map = {}
+            if include_medications:
+                preload_cur.execute('SELECT patient_id, generic_name, eye, last_application_days '
+                                    'FROM ocular_medications WHERE patient_id = ANY(%s)', (chunk_ids,))
+                ocular_med_map = _index_by_patient(preload_cur.fetchall())
+                preload_cur.execute('SELECT patient_id, generic_name, last_application_days '
+                                    'FROM systemic_medications WHERE patient_id = ANY(%s)', (chunk_ids,))
+                systemic_med_map = _index_by_patient(preload_cur.fetchall())
+
+            for patient in chunk:
+                yield build_row(patient, ocular_map, surgery_map, systemic_map, ocular_med_map, systemic_med_map)
+
+            rows_done += len(chunk)
+            if progress_cb is not None:
+                progress_cb(rows_done)
+    finally:
+        for c in (stream_cur, preload_cur):
+            try:
+                c.close()
+            except Exception:
+                pass
+
+
 @app.route('/export_data', methods=['GET', 'POST'])
 @login_required
 def export_data():
@@ -2481,459 +2867,55 @@ def export_data():
         }
 
         if request.method == 'POST':
-            # Handle export
+            # Build export parameters from the submitted form
             export_format = request.form.get('format', 'csv')
             data_type = request.form.get('data_type', 'anonymized')
-
-            # Staff can only export anonymized data
             if session.get('role') == 'Staff':
                 data_type = 'anonymized'
+            allow_sensitive = (data_type == 'sensitive' and session.get('role') == 'Administrator')
 
-            # Get date range if provided
-            date_from = request.form.get('date_from')
-            date_to = request.form.get('date_to')
+            params = {
+                'format': export_format,
+                'data_type': data_type,
+                'allow_sensitive': allow_sensitive,
+                'include_conditions': 'include_conditions' in request.form,
+                'include_other_conditions': 'include_other_conditions' in request.form,
+                'include_surgeries': 'include_surgeries' in request.form,
+                'include_systemic': 'include_systemic' in request.form,
+                'include_medications': 'include_medications' in request.form,
+                'date_from': request.form.get('date_from'),
+                'date_to': request.form.get('date_to'),
+                'filters': {k: v for k, v in request.form.items() if k.startswith('filter_')},
+            }
 
-            # Get data inclusion options
-            include_conditions = 'include_conditions' in request.form
-            include_other_conditions = 'include_other_conditions' in request.form
-            include_surgeries = 'include_surgeries' in request.form
-            include_systemic = 'include_systemic' in request.form
-            include_medications = 'include_medications' in request.form
-
-            # ============================================================
-            # STEP 1: Query all reference data (including inactive items used by any patient)
-            # ============================================================
-
-            # Get all medications (active OR used by patients)
-            cur.execute('''
-                SELECT DISTINCT generic_name
-                FROM (
-                    SELECT generic_name FROM medications WHERE active = TRUE
-                    UNION
-                    SELECT DISTINCT generic_name FROM ocular_medications
-                    UNION
-                    SELECT DISTINCT generic_name FROM systemic_medications
-                ) AS all_meds
-                ORDER BY generic_name
-            ''')
-            all_medications = [row['generic_name'] for row in cur.fetchall()]
-
-            # Get all unique generic components for dynamic columns
-            all_generic_components = get_all_generic_components()
-
-            # Sort them alphabetically for consistent column ordering
-            sorted_generic_components = sorted(all_generic_components)
-
-            # Get all ocular ICD-10 codes (active OR used by patients)
-            cur.execute('''
-                SELECT DISTINCT code
-                FROM (
-                    SELECT code FROM icd10_ocular_conditions WHERE active = TRUE
-                    UNION
-                    SELECT DISTINCT icd10_code AS code FROM other_ocular_conditions
-                ) AS all_codes
-                ORDER BY code
-            ''')
-            all_ocular_codes = [row['code'] for row in cur.fetchall()]
-
-            # Get all systemic ICD-10 codes (active OR used by patients)
-            cur.execute('''
-                SELECT DISTINCT code
-                FROM (
-                    SELECT code FROM icd10_systemic_conditions WHERE active = TRUE
-                    UNION
-                    SELECT DISTINCT icd10_code AS code FROM systemic_conditions
-                ) AS all_codes
-                ORDER BY code
-            ''')
-            all_systemic_codes = [row['code'] for row in cur.fetchall()]
-
-            # Get all surgery codes (active OR used by patients)
-            # FIXED: surgeries table uses 'code' not 'surgery_code'
-            cur.execute('''
-                SELECT DISTINCT code
-                FROM (
-                    SELECT code FROM surgeries WHERE active = TRUE
-                    UNION
-                    SELECT DISTINCT surgery_code AS code FROM previous_ocular_surgeries
-                ) AS all_surgeries
-                ORDER BY code
-            ''')
-            all_surgeries = [row['code'] for row in cur.fetchall()]
-
-            # ============================================================
-            # STEP 2: Build base query for patients
-            # ============================================================
-
-            if data_type == 'sensitive' and session.get('role') == 'Administrator':
-                # Sensitive export - includes names and MBO
-                base_query = '''
-                    SELECT 
-                        ps.patient_id,
-                        ps.patient_name,
-                        ps.mbo,
-                        pst.sex,
-                        ps.date_of_birth,
-                        ps.date_of_sample_collection,
-                        pst.eye,
-                        pst.person_hash,
-                        pst.age
-                '''
-            else:
-                # Anonymized export
-                base_query = '''
-                    SELECT 
-                        ps.patient_id,
-                        pst.person_hash,
-                        pst.sex,
-                        pst.eye,
-                        pst.age
-                '''
-
-            # Add ocular conditions if requested
-            if include_conditions:
-                base_query += ''',
-                    oc.lens_status,
-                    oc.locs_iii_no,
-                    oc.locs_iii_nc,
-                    oc.locs_iii_c,
-                    oc.locs_iii_p,
-                    oc.iol_type,
-                    oc.etiology_aphakia,
-                    oc.glaucoma,
-                    oc.oht_or_pac,
-                    oc.etiology_glaucoma,
-                    oc.steroid_responder,
-                    oc.pxs,
-                    oc.pds,
-                    oc.diabetic_retinopathy,
-                    oc.stage_diabetic_retinopathy,
-                    oc.stage_npdr,
-                    oc.stage_pdr,
-                    oc.macular_edema,
-                    oc.etiology_macular_edema,
-                    oc.macular_degeneration_dystrophy,
-                    oc.etiology_macular_deg_dyst,
-                    oc.stage_amd,
-                    oc.exudation_amd,
-                    oc.stage_other_macular_deg,
-                    oc.exudation_other_macular_deg,
-                    oc.macular_hole_vmt,
-                    oc.etiology_mh_vmt,
-                    oc.cause_secondary_mh_vmt,
-                    oc.treatment_status_mh_vmt,
-                    oc.epiretinal_membrane,
-                    oc.etiology_erm,
-                    oc.cause_secondary_erm,
-                    oc.treatment_status_erm,
-                    oc.retinal_detachment,
-                    oc.etiology_rd,
-                    oc.treatment_status_rd,
-                    oc.pvr,
-                    oc.vitreous_haemorrhage_opacification,
-                    oc.etiology_vitreous_haemorrhage
-                '''
-
-            base_query += '''
-                FROM patients_sensitive ps
-                JOIN patients_statistical pst ON ps.patient_id = pst.patient_id
-            '''
-
-            if include_conditions:
-                base_query += ' LEFT JOIN ocular_conditions oc ON ps.patient_id = oc.patient_id'
-
-            base_query += ' WHERE 1=1'
-
-            params = []
-
-            # Add date filters
-            if date_from:
-                base_query += ' AND ps.date_of_sample_collection >= %s'
-                params.append(date_from)
-            if date_to:
-                base_query += ' AND ps.date_of_sample_collection <= %s'
-                params.append(date_to)
-
-            # Add patient filters
-            filter_clause, filter_params = build_filter_clause(request.form)
-            base_query += filter_clause
-            params.extend(filter_params)
-
-            base_query += ' ORDER BY ps.patient_id'
-
-            # ============================================================
-            # STEP 3: (removed) Patient rows are no longer fetched eagerly.
-            # ============================================================
-            # The base query is executed lazily via a server-side cursor in
-            # STEP 5 and consumed in chunks; each chunk's related data
-            # (conditions / surgeries / medications) is preloaded per-chunk.
-            # This keeps peak memory proportional to the chunk size instead of
-            # the total number of patients, so the export scales to very large
-            # datasets rather than building the whole result set in RAM.
-
-            # ============================================================
-            # STEP 4: Build column headers (BINARY FORMAT)
-            # ============================================================
-
-            # Helper function to make safe column names
-            def make_safe_column_name(name):
-                """Convert any name to safe column name"""
-                safe = str(name).lower()
-                safe = safe.replace(' ', '_')
-                safe = safe.replace('/', '_')
-                safe = safe.replace('-', '_')
-                safe = safe.replace('.', '_')
-                safe = safe.replace('(', '')
-                safe = safe.replace(')', '')
-                safe = safe.replace('+', '_')
-                safe = ''.join(c if c.isalnum() or c == '_' else '' for c in safe)
-                # Ensure doesn't start with number
-                if safe and safe[0].isdigit():
-                    safe = 'x_' + safe
-                return safe
-
-            # Start with base columns
-            if data_type == 'sensitive' and session.get('role') == 'Administrator':
-                final_columns = [
-                    'patient_id', 'patient_name', 'mbo', 'sex', 'date_of_birth',
-                    'date_of_sample_collection', 'eye', 'person_hash', 'age'
-                ]
-            else:
-                final_columns = ['patient_id', 'person_hash', 'sex', 'eye', 'age']
-
-            # Add main condition columns if included
-            if include_conditions:
-                final_columns.extend([
-                    'lens_status', 'locs_iii_no', 'locs_iii_nc', 'locs_iii_c', 'locs_iii_p',
-                    'iol_type', 'etiology_aphakia', 'glaucoma', 'oht_or_pac', 'etiology_glaucoma',
-                    'steroid_responder', 'pxs', 'pds', 'diabetic_retinopathy', 'stage_diabetic_retinopathy',
-                    'stage_npdr', 'stage_pdr', 'macular_edema', 'etiology_macular_edema',
-                    'macular_degeneration_dystrophy', 'etiology_macular_deg_dyst', 'stage_amd',
-                    'exudation_amd', 'stage_other_macular_deg', 'exudation_other_macular_deg',
-                    'macular_hole_vmt', 'etiology_mh_vmt', 'cause_secondary_mh_vmt',
-                    'treatment_status_mh_vmt', 'epiretinal_membrane', 'etiology_erm',
-                    'cause_secondary_erm', 'treatment_status_erm', 'retinal_detachment',
-                    'etiology_rd', 'treatment_status_rd', 'pvr', 'vitreous_haemorrhage_opacification',
-                    'etiology_vitreous_haemorrhage'
-                ])
-
-            # Add binary columns for other ocular conditions
-            if include_other_conditions:
-                for code in all_ocular_codes:
-                    safe_code = make_safe_column_name(code)
-                    final_columns.append(f'other_ocular_{safe_code}')
-                    final_columns.append(f'other_ocular_{safe_code}_eye')
-
-            # Add binary columns for surgeries
-            if include_surgeries:
-                for surgery in all_surgeries:
-                    safe_surgery = make_safe_column_name(surgery)
-                    final_columns.append(f'surgery_{safe_surgery}')
-                    final_columns.append(f'surgery_{safe_surgery}_eye')
-
-            # Add binary columns for systemic conditions
-            if include_systemic:
-                for code in all_systemic_codes:
-                    safe_code = make_safe_column_name(code)
-                    final_columns.append(f'systemic_{safe_code}')
-
-            # Add binary columns for ocular medications
-            if include_medications:
-                for med in all_medications:
-                    safe_med = make_safe_column_name(med)
-                    final_columns.append(f'ocular_med_{safe_med}')
-                    final_columns.append(f'ocular_med_{safe_med}_eye')
-                    final_columns.append(f'ocular_med_{safe_med}_days')
-
-            # Add binary columns for systemic medications
-            if include_medications:
-                for med in all_medications:
-                    safe_med = make_safe_column_name(med)
-                    final_columns.append(f'systemic_med_{safe_med}')
-                    final_columns.append(f'systemic_med_{safe_med}_days')
-
-            # Add binary columns for generic components
-            if include_medications:
-                for generic_component in sorted_generic_components:
-                    safe_generic = make_safe_column_name(generic_component)
-                    final_columns.append(f'takes_{safe_generic}')
-
-            # ============================================================
-            # STEP 5: Stream patient rows (chunked) instead of materialising
-            #         the entire dataset in memory
-            # ============================================================
-
-            CHUNK_SIZE = 500
-
-            def _index_by_patient(rows):
-                """Group related rows into {patient_id: [rows]}."""
-                grouped = {}
-                for related in rows:
-                    grouped.setdefault(related['patient_id'], []).append(related)
-                return grouped
-
-            def build_row(patient, ocular_map, surgery_map, systemic_map,
-                          ocular_med_map, systemic_med_map):
-                """Build one binary-format export row for a single patient."""
-                row = {}
-
-                # Fill base patient data / defaults
-                for col in final_columns:
-                    if col in patient:
-                        value = patient[col]
-                        # Convert dates to strings
-                        if isinstance(value, (date, datetime)):
-                            row[col] = value.strftime('%Y-%m-%d')
-                        else:
-                            row[col] = value
-                    elif col.endswith('_eye') or col.endswith('_days'):
-                        row[col] = 'ND'
-                    elif col.startswith(('other_ocular_', 'surgery_', 'systemic_',
-                                         'ocular_med_', 'systemic_med_')):
-                        # Binary presence columns default to 0
-                        row[col] = 0
-                    else:
-                        row[col] = ''
-
-                pid = patient['patient_id']
-
-                # Other ocular conditions (BINARY)
-                if include_other_conditions:
-                    for cond in ocular_map.get(pid, []):
-                        safe_code = make_safe_column_name(cond['icd10_code'])
-                        row[f'other_ocular_{safe_code}'] = 1
-                        row[f'other_ocular_{safe_code}_eye'] = cond['eye']
-
-                # Surgeries (BINARY)
-                if include_surgeries:
-                    for surgery in surgery_map.get(pid, []):
-                        safe_surgery = make_safe_column_name(surgery['surgery_code'])
-                        row[f'surgery_{safe_surgery}'] = 1
-                        row[f'surgery_{safe_surgery}_eye'] = surgery['eye']
-
-                # Systemic conditions (BINARY)
-                if include_systemic:
-                    for cond in systemic_map.get(pid, []):
-                        safe_code = make_safe_column_name(cond['icd10_code'])
-                        row[f'systemic_{safe_code}'] = 1
-
-                # Ocular + systemic medications (BINARY)
-                if include_medications:
-                    for med in ocular_med_map.get(pid, []):
-                        safe_med = make_safe_column_name(med['generic_name'])
-                        row[f'ocular_med_{safe_med}'] = 1
-                        row[f'ocular_med_{safe_med}_eye'] = med['eye']
-                        row[f'ocular_med_{safe_med}_days'] = med['last_application_days']
-                    for med in systemic_med_map.get(pid, []):
-                        safe_med = make_safe_column_name(med['generic_name'])
-                        row[f'systemic_med_{safe_med}'] = 1
-                        row[f'systemic_med_{safe_med}_days'] = med['last_application_days']
-
-                    # Generic drug components (BINARY)
-                    patient_all_meds = [{'generic_name': med['generic_name']}
-                                        for med in ocular_med_map.get(pid, [])]
-                    patient_all_meds += [{'generic_name': med['generic_name']}
-                                         for med in systemic_med_map.get(pid, [])]
-                    generic_flags = extract_generic_components_dynamic(
-                        patient_all_meds, all_generic_components)
-                    for key, value in generic_flags.items():
-                        if key in final_columns:
-                            row[key] = value
-
-                return row
-
-            def generate_export_rows():
-                """Yield export rows one at a time.
-
-                Patients are read through a server-side cursor and processed in
-                chunks of CHUNK_SIZE; each chunk's related data is preloaded with
-                a handful of ANY(%s) queries. Peak memory therefore stays
-                proportional to the chunk size rather than the total patient
-                count. Owns the DB connection and closes it once the stream is
-                fully consumed (or the client disconnects mid-download).
-                """
-                stream_cur = conn.cursor(name='export_patient_stream',
-                                         cursor_factory=RealDictCursor)
-                stream_cur.itersize = CHUNK_SIZE
-                try:
-                    stream_cur.execute(base_query, params)
-                    while True:
-                        chunk = stream_cur.fetchmany(CHUNK_SIZE)
-                        if not chunk:
-                            break
-
-                        chunk_ids = [p['patient_id'] for p in chunk]
-
-                        ocular_map = {}
-                        if include_other_conditions:
-                            cur.execute('SELECT patient_id, icd10_code, eye '
-                                        'FROM other_ocular_conditions WHERE patient_id = ANY(%s)',
-                                        (chunk_ids,))
-                            ocular_map = _index_by_patient(cur.fetchall())
-
-                        surgery_map = {}
-                        if include_surgeries:
-                            cur.execute('SELECT patient_id, surgery_code, eye '
-                                        'FROM previous_ocular_surgeries WHERE patient_id = ANY(%s)',
-                                        (chunk_ids,))
-                            surgery_map = _index_by_patient(cur.fetchall())
-
-                        systemic_map = {}
-                        if include_systemic:
-                            cur.execute('SELECT patient_id, icd10_code '
-                                        'FROM systemic_conditions WHERE patient_id = ANY(%s)',
-                                        (chunk_ids,))
-                            systemic_map = _index_by_patient(cur.fetchall())
-
-                        ocular_med_map = {}
-                        systemic_med_map = {}
-                        if include_medications:
-                            cur.execute('SELECT patient_id, generic_name, eye, last_application_days '
-                                        'FROM ocular_medications WHERE patient_id = ANY(%s)',
-                                        (chunk_ids,))
-                            ocular_med_map = _index_by_patient(cur.fetchall())
-                            cur.execute('SELECT patient_id, generic_name, last_application_days '
-                                        'FROM systemic_medications WHERE patient_id = ANY(%s)',
-                                        (chunk_ids,))
-                            systemic_med_map = _index_by_patient(cur.fetchall())
-
-                        for patient in chunk:
-                            yield build_row(patient, ocular_map, surgery_map,
-                                            systemic_map, ocular_med_map, systemic_med_map)
-                finally:
-                    for closeable in (stream_cur, cur, conn):
-                        try:
-                            closeable.close()
-                        except Exception:
-                            pass
-
-            # ============================================================
-            # STEP 6: Generate export file (streamed from the row generator)
-            # ============================================================
+            # Build the column layout + base query (shared with the background
+            # export worker so synchronous and queued exports are identical).
+            plan = build_export_plan(conn, params)
+            final_columns = plan['final_columns']
 
             from flask import Response, stream_with_context
-
-            filename_type = 'sensitive' if data_type == 'sensitive' else 'anonymized'
+            filename_type = 'sensitive' if allow_sensitive else 'anonymized'
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
             if export_format == 'csv':
-                # Stream the CSV row-by-row: nothing larger than a single row is
-                # held in memory and the download begins immediately. The DB
-                # connection is owned (and closed) by generate_export_rows().
+                # Stream CSV row-by-row; connection closed when the generator is
+                # exhausted (or the client disconnects mid-download).
                 def csv_stream():
-                    buffer = io.StringIO()
-                    writer = csv.DictWriter(buffer, fieldnames=final_columns,
-                                            extrasaction='ignore')
-                    writer.writeheader()
-                    yield buffer.getvalue()
-                    buffer.seek(0)
-                    buffer.truncate(0)
-
-                    for data_row in generate_export_rows():
-                        writer.writerow(data_row)
+                    try:
+                        buffer = io.StringIO()
+                        writer = csv.DictWriter(buffer, fieldnames=final_columns,
+                                                extrasaction='ignore')
+                        writer.writeheader()
                         yield buffer.getvalue()
                         buffer.seek(0)
                         buffer.truncate(0)
+                        for data_row in iter_export_rows(conn, plan):
+                            writer.writerow(data_row)
+                            yield buffer.getvalue()
+                            buffer.seek(0)
+                            buffer.truncate(0)
+                    finally:
+                        conn.close()
 
                 return Response(
                     stream_with_context(csv_stream()),
@@ -2944,7 +2926,6 @@ def export_data():
                 )
 
             elif export_format == 'excel':
-                # Generate Excel file
                 try:
                     from openpyxl import Workbook
                     from openpyxl.cell import WriteOnlyCell
@@ -2954,36 +2935,35 @@ def export_data():
                     flash('Excel export requires openpyxl. Please run: pip install openpyxl', 'error')
                     return redirect(url_for('export_data'))
 
-                # write_only mode streams cells to a temp file instead of keeping
-                # a Cell object for every cell in memory. Combined with the chunked
-                # row generator, peak memory no longer scales with the patient
-                # count. (xlsx is a zip and can't be streamed to the client
-                # progressively, so it is assembled then sent; for very large
-                # dumps prefer CSV.)
-                wb = Workbook(write_only=True)
-                ws = wb.create_sheet("Patient Data")
+                try:
+                    # write_only keeps cells out of memory; combined with the
+                    # chunked generator, peak memory does not scale with the
+                    # patient count. (xlsx is a zip, so it is assembled then
+                    # sent; for very large dumps prefer CSV or a background job.)
+                    wb = Workbook(write_only=True)
+                    ws = wb.create_sheet("Patient Data")
 
-                header_fill = PatternFill(start_color="3498db", end_color="3498db", fill_type="solid")
-                header_font = Font(bold=True, color="FFFFFF")
-                header_alignment = Alignment(horizontal='center')
+                    header_fill = PatternFill(start_color="3498db", end_color="3498db", fill_type="solid")
+                    header_font = Font(bold=True, color="FFFFFF")
+                    header_alignment = Alignment(horizontal='center')
 
-                header_cells = []
-                for fieldname in final_columns:
-                    cell = WriteOnlyCell(ws, value=fieldname)
-                    cell.fill = header_fill
-                    cell.font = header_font
-                    cell.alignment = header_alignment
-                    header_cells.append(cell)
-                ws.append(header_cells)
+                    header_cells = []
+                    for fieldname in final_columns:
+                        cell = WriteOnlyCell(ws, value=fieldname)
+                        cell.fill = header_fill
+                        cell.font = header_font
+                        cell.alignment = header_alignment
+                        header_cells.append(cell)
+                    ws.append(header_cells)
 
-                # Consuming the generator writes one row at a time and closes the
-                # DB connection when exhausted.
-                for data_row in generate_export_rows():
-                    ws.append([data_row.get(fieldname, '') for fieldname in final_columns])
+                    for data_row in iter_export_rows(conn, plan):
+                        ws.append([data_row.get(fieldname, '') for fieldname in final_columns])
 
-                excel_output = io.BytesIO()
-                wb.save(excel_output)
-                excel_output.seek(0)
+                    excel_output = io.BytesIO()
+                    wb.save(excel_output)
+                    excel_output.seek(0)
+                finally:
+                    conn.close()
 
                 return Response(
                     excel_output.getvalue(),
@@ -3004,6 +2984,477 @@ def export_data():
         # Return proper stats structure even on error
         return render_template('export_data.html',
                                stats={'total_patients': 0, 'gender': {'M': 0, 'F': 0}, 'age_distribution': []})
+
+
+# =============== BACKGROUND EXPORT JOBS ===============
+
+def _safe_remove(path):
+    """Delete a file if it exists, ignoring errors."""
+    try:
+        if path and os.path.exists(path):
+            os.remove(path)
+    except OSError as e:
+        print(f"[export] could not remove {path}: {e}")
+
+
+def _update_export_job(conn, job_id, **fields):
+    """Update selected columns on an export job. `fields` keys are internal
+    (never user input), so building the SET clause from them is safe."""
+    if not fields:
+        return
+    set_clause = ', '.join(f"{k} = %s" for k in fields)
+    values = list(fields.values()) + [job_id]
+    cur = conn.cursor()
+    try:
+        cur.execute(f"UPDATE export_jobs SET {set_clause} WHERE job_id = %s", values)
+        if not conn.autocommit:
+            conn.commit()
+    finally:
+        cur.close()
+
+
+def claim_next_export_job():
+    """Atomically claim the oldest pending job (FOR UPDATE SKIP LOCKED so
+    multiple workers never grab the same one). Returns a job_id or None."""
+    conn = get_db_connection()
+    if not conn:
+        return None
+    try:
+        cur = conn.cursor()
+        cur.execute('''
+            SELECT job_id FROM export_jobs
+            WHERE status = 'pending'
+            ORDER BY created_at
+            FOR UPDATE SKIP LOCKED
+            LIMIT 1
+        ''')
+        row = cur.fetchone()
+        if not row:
+            conn.commit()
+            return None
+        job_id = row[0]
+        cur.execute("""UPDATE export_jobs
+                       SET status = 'running', started_at = CURRENT_TIMESTAMP,
+                           heartbeat_at = CURRENT_TIMESTAMP
+                       WHERE job_id = %s""", (job_id,))
+        conn.commit()
+        cur.close()
+        return job_id
+    except Exception as e:
+        print(f"[export] claim error: {e}")
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return None
+    finally:
+        conn.close()
+
+
+def reclaim_stale_export_jobs():
+    """Reset jobs stuck in 'running' with a stale heartbeat (their worker
+    crashed) back to 'pending' so they can be retried."""
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        cur = conn.cursor()
+        cur.execute('''
+            UPDATE export_jobs
+            SET status = 'pending', started_at = NULL, heartbeat_at = NULL
+            WHERE status = 'running'
+              AND (heartbeat_at IS NULL
+                   OR heartbeat_at < CURRENT_TIMESTAMP - (INTERVAL '1 minute' * %s))
+        ''', (EXPORT_STALE_MINUTES,))
+        n = cur.rowcount
+        conn.commit()
+        cur.close()
+        if n:
+            print(f"[export] reclaimed {n} stale running job(s)")
+    except Exception as e:
+        print(f"[export] reclaim error: {e}")
+    finally:
+        conn.close()
+
+
+def sweep_expired_exports():
+    """Delete expired export files + their job rows, and remove orphan/stale
+    .part files left on disk. Keeps export storage from growing unbounded."""
+    conn = get_db_connection()
+    if not conn:
+        return
+    try:
+        cur = conn.cursor(cursor_factory=RealDictCursor)
+
+        cur.execute("SELECT job_id, file_path FROM export_jobs "
+                    "WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP")
+        expired = cur.fetchall()
+        for j in expired:
+            _safe_remove(j['file_path'])
+        if expired:
+            cur.execute("DELETE FROM export_jobs "
+                        "WHERE expires_at IS NOT NULL AND expires_at < CURRENT_TIMESTAMP")
+            conn.commit()
+            print(f"[export] swept {len(expired)} expired export(s)")
+
+        # Orphan / leftover .part files older than the retention window.
+        cur.execute("SELECT file_path FROM export_jobs WHERE file_path IS NOT NULL")
+        referenced = {os.path.basename(r['file_path']) for r in cur.fetchall() if r['file_path']}
+        if os.path.isdir(EXPORT_DIRECTORY):
+            for fname in os.listdir(EXPORT_DIRECTORY):
+                fpath = os.path.join(EXPORT_DIRECTORY, fname)
+                if not os.path.isfile(fpath):
+                    continue
+                if fname.endswith('.part') or fname not in referenced:
+                    try:
+                        age_hours = (time.time() - os.path.getmtime(fpath)) / 3600.0
+                        if age_hours > EXPORT_RETENTION_HOURS:
+                            _safe_remove(fpath)
+                    except OSError:
+                        pass
+        cur.close()
+    except Exception as e:
+        print(f"[export] sweep error: {e}")
+    finally:
+        conn.close()
+
+
+def process_export_job(job_id):
+    """Generate the export file for a queued job. Runs in the worker process.
+
+    Uses two connections: `data_conn` for the (commit-free) streaming read, and
+    `meta_conn` (autocommit) for progress/heartbeat/status writes — committing on
+    the data connection would invalidate the server-side cursor mid-stream.
+    Writes to a temporary `.part` file and atomically renames on success, so a
+    crash or cancel never leaves a half-written file that could be downloaded.
+    """
+    data_conn = get_db_connection()
+    meta_conn = get_db_connection()
+    if not data_conn or not meta_conn:
+        print(f"[export] no DB connection for job {job_id}")
+        for c in (data_conn, meta_conn):
+            if c:
+                c.close()
+        return
+    meta_conn.autocommit = True
+
+    part_path = None
+    try:
+        cur = meta_conn.cursor(cursor_factory=RealDictCursor)
+        cur.execute('SELECT * FROM export_jobs WHERE job_id = %s', (job_id,))
+        job = cur.fetchone()
+        cur.close()
+        if not job:
+            print(f"[export] job {job_id} not found")
+            return
+
+        # Cancelled before processing started (e.g. while still queued).
+        if job['cancel_requested']:
+            _update_export_job(meta_conn, job_id, status='cancelled', finished_at=datetime.now())
+            print(f"[export] job {job_id} cancelled before start")
+            return
+
+        params = json.loads(job['params'])
+        export_format = params.get('format', 'csv')
+        ext = 'xlsx' if export_format == 'excel' else 'csv'
+        kind = 'sensitive' if params.get('allow_sensitive') else 'anonymized'
+        download_name = f"raman_export_{kind}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.{ext}"
+
+        os.makedirs(EXPORT_DIRECTORY, exist_ok=True)
+        final_path = os.path.join(EXPORT_DIRECTORY, f"{job_id}.{ext}")
+        part_path = final_path + '.part'
+
+        _update_export_job(meta_conn, job_id, status='running',
+                           started_at=datetime.now(), heartbeat_at=datetime.now(),
+                           file_name=download_name)
+
+        plan = build_export_plan(data_conn, params)
+        final_columns = plan['final_columns']
+        try:
+            total_rows = count_export_rows(data_conn, plan)
+        except Exception:
+            total_rows = None
+        _update_export_job(meta_conn, job_id, rows_total=total_rows)
+
+        def is_cancelled():
+            c = meta_conn.cursor()
+            try:
+                c.execute('SELECT cancel_requested FROM export_jobs WHERE job_id = %s', (job_id,))
+                r = c.fetchone()
+                return bool(r and r[0])
+            finally:
+                c.close()
+
+        throttle = {'last': 0.0}
+
+        def on_progress(done):
+            now = time.time()
+            if now - throttle['last'] >= 1.0:
+                throttle['last'] = now
+                _update_export_job(meta_conn, job_id, rows_done=done, heartbeat_at=datetime.now())
+
+        if export_format == 'excel':
+            from openpyxl import Workbook
+            from openpyxl.cell import WriteOnlyCell
+            from openpyxl.styles import Font, PatternFill, Alignment
+            wb = Workbook(write_only=True)
+            ws = wb.create_sheet("Patient Data")
+            header_fill = PatternFill(start_color="3498db", end_color="3498db", fill_type="solid")
+            header_font = Font(bold=True, color="FFFFFF")
+            header_alignment = Alignment(horizontal='center')
+            header_cells = []
+            for fieldname in final_columns:
+                c = WriteOnlyCell(ws, value=fieldname)
+                c.fill = header_fill
+                c.font = header_font
+                c.alignment = header_alignment
+                header_cells.append(c)
+            ws.append(header_cells)
+            for row in iter_export_rows(data_conn, plan, progress_cb=on_progress, cancel_cb=is_cancelled):
+                ws.append([row.get(fn, '') for fn in final_columns])
+            cancelled = is_cancelled()
+            if not cancelled:
+                wb.save(part_path)
+        else:
+            with open(part_path, 'w', newline='', encoding='utf-8') as f:
+                writer = csv.DictWriter(f, fieldnames=final_columns, extrasaction='ignore')
+                writer.writeheader()
+                for row in iter_export_rows(data_conn, plan, progress_cb=on_progress, cancel_cb=is_cancelled):
+                    writer.writerow(row)
+            cancelled = is_cancelled()
+
+        if cancelled:
+            _safe_remove(part_path)
+            _update_export_job(meta_conn, job_id, status='cancelled', finished_at=datetime.now())
+            print(f"[export] job {job_id} cancelled")
+            return
+
+        os.replace(part_path, final_path)  # atomic publish
+        expires = datetime.now() + timedelta(hours=EXPORT_RETENTION_HOURS)
+        _update_export_job(meta_conn, job_id, status='done', file_path=final_path,
+                           rows_done=(total_rows if total_rows is not None else 0),
+                           finished_at=datetime.now(), expires_at=expires)
+        print(f"[export] job {job_id} done ({total_rows} rows) -> {final_path}")
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        _safe_remove(part_path)
+        try:
+            _update_export_job(meta_conn, job_id, status='failed',
+                               error=str(e)[:1000], finished_at=datetime.now())
+        except Exception:
+            pass
+    finally:
+        for c in (data_conn, meta_conn):
+            try:
+                c.close()
+            except Exception:
+                pass
+
+
+def _export_job_params_from_form(form, role):
+    """Build the stored params dict from a submitted export form."""
+    data_type = form.get('data_type', 'anonymized')
+    if role == 'Staff':
+        data_type = 'anonymized'
+    allow_sensitive = (data_type == 'sensitive' and role == 'Administrator')
+    return {
+        'format': form.get('format', 'csv'),
+        'data_type': data_type,
+        'allow_sensitive': allow_sensitive,
+        'include_conditions': 'include_conditions' in form,
+        'include_other_conditions': 'include_other_conditions' in form,
+        'include_surgeries': 'include_surgeries' in form,
+        'include_systemic': 'include_systemic' in form,
+        'include_medications': 'include_medications' in form,
+        'date_from': form.get('date_from') or None,
+        'date_to': form.get('date_to') or None,
+        'filters': {k: v for k, v in form.items() if k.startswith('filter_')},
+    }
+
+
+def _load_export_job(conn, job_id):
+    cur = conn.cursor(cursor_factory=RealDictCursor)
+    try:
+        cur.execute('SELECT * FROM export_jobs WHERE job_id = %s', (job_id,))
+        return cur.fetchone()
+    finally:
+        cur.close()
+
+
+def _export_job_accessible(job):
+    """A job is accessible to its owner, or to any Administrator."""
+    if session.get('role') == 'Administrator':
+        return True
+    return job['requested_by'] == session.get('user_id')
+
+
+def _inline_export_worker_loop():
+    """Loop body for the in-process export worker (daemon thread)."""
+    print("[export] inline worker thread started")
+    poll = int(os.getenv('EXPORT_POLL_SECONDS', '3'))
+    sweep_every = int(os.getenv('EXPORT_SWEEP_SECONDS', '600'))
+    try:
+        reclaim_stale_export_jobs()
+    except Exception:
+        traceback.print_exc()
+    last_sweep = 0.0
+    while True:
+        try:
+            job_id = claim_next_export_job()
+            if job_id:
+                process_export_job(job_id)
+            else:
+                time.sleep(poll)
+            now = time.time()
+            if now - last_sweep > sweep_every:
+                last_sweep = now
+                reclaim_stale_export_jobs()
+                sweep_expired_exports()
+        except Exception:
+            traceback.print_exc()
+            time.sleep(poll)
+
+
+def ensure_inline_export_worker():
+    """Start the in-process export worker thread once per process (idempotent).
+
+    No-op when disabled (EXPORT_INLINE_WORKER=false) or in the dedicated worker
+    process (RAMAN_ROLE=worker, which runs worker.py instead). Called lazily on
+    the first queued export so it works under both the dev server and gunicorn.
+    """
+    global inline_export_thread
+    if not EXPORT_INLINE_WORKER or os.getenv('RAMAN_ROLE') == 'worker':
+        return
+    with inline_export_lock:
+        if inline_export_thread is not None and inline_export_thread.is_alive():
+            return
+        inline_export_thread = threading.Thread(
+            target=_inline_export_worker_loop, name='inline-export-worker', daemon=True)
+        inline_export_thread.start()
+
+
+@app.route('/export/start', methods=['POST'])
+@login_required
+def export_start():
+    """Queue a background export job and return its id."""
+    params = _export_job_params_from_form(request.form, session.get('role'))
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection error'}), 500
+    try:
+        job_id = str(uuid.uuid4())
+        cur = conn.cursor()
+        cur.execute('''
+            INSERT INTO export_jobs (job_id, requested_by, requested_by_name, params, status)
+            VALUES (%s, %s, %s, %s, 'pending')
+        ''', (job_id, session.get('user_id'), session.get('username'), json.dumps(params)))
+        conn.commit()
+        cur.close()
+        # Make sure something is consuming the queue (no-op if the dedicated
+        # export_worker container is handling it).
+        ensure_inline_export_worker()
+        return jsonify({'job_id': job_id, 'status': 'pending'}), 202
+    except Exception as e:
+        try:
+            conn.rollback()
+        except Exception:
+            pass
+        return jsonify({'error': str(e)}), 500
+    finally:
+        conn.close()
+
+
+@app.route('/export/status/<job_id>')
+@login_required
+def export_status(job_id):
+    """Return the current status/progress of an export job (JSON)."""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection error'}), 500
+    try:
+        job = _load_export_job(conn, job_id)
+        if not job:
+            return jsonify({'error': 'Job not found'}), 404
+        if not _export_job_accessible(job):
+            return jsonify({'error': 'Forbidden'}), 403
+        total = job['rows_total'] or 0
+        done = job['rows_done'] or 0
+        if job['status'] == 'done':
+            percent = 100
+        elif total > 0:
+            percent = min(99, int(done * 100 / total))
+        else:
+            percent = 0
+        return jsonify({
+            'job_id': job_id,
+            'status': job['status'],
+            'rows_done': done,
+            'rows_total': job['rows_total'],
+            'percent': percent,
+            'file_name': job['file_name'],
+            'error': job['error'],
+        })
+    finally:
+        conn.close()
+
+
+@app.route('/export/cancel/<job_id>', methods=['POST'])
+@login_required
+def export_cancel(job_id):
+    """Request cancellation of a pending/running export job."""
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({'error': 'Database connection error'}), 500
+    try:
+        job = _load_export_job(conn, job_id)
+        if not job:
+            return jsonify({'error': 'Job not found'}), 404
+        if not _export_job_accessible(job):
+            return jsonify({'error': 'Forbidden'}), 403
+        cur = conn.cursor()
+        cur.execute("UPDATE export_jobs SET cancel_requested = TRUE "
+                    "WHERE job_id = %s AND status IN ('pending', 'running')", (job_id,))
+        conn.commit()
+        cur.close()
+        return jsonify({'ok': True})
+    finally:
+        conn.close()
+
+
+@app.route('/export/download/<job_id>')
+@login_required
+def export_download(job_id):
+    """Stream a finished export file to its owner (or an admin)."""
+    from flask import send_file
+    conn = get_db_connection()
+    if not conn:
+        flash('Database connection error', 'error')
+        return redirect(url_for('export_data'))
+    try:
+        job = _load_export_job(conn, job_id)
+        if not job or not _export_job_accessible(job):
+            flash('Export not found.', 'error')
+            return redirect(url_for('export_data'))
+
+        # Sensitive files may only be downloaded by an administrator.
+        try:
+            job_params = json.loads(job['params'])
+        except Exception:
+            job_params = {}
+        if job_params.get('allow_sensitive') and session.get('role') != 'Administrator':
+            flash('Administrator access required for sensitive exports.', 'error')
+            return redirect(url_for('export_data'))
+
+        if job['status'] != 'done' or not job['file_path'] or not os.path.exists(job['file_path']):
+            flash('This export is not ready yet or has expired.', 'error')
+            return redirect(url_for('export_data'))
+
+        return send_file(job['file_path'], as_attachment=True,
+                         download_name=job['file_name'] or os.path.basename(job['file_path']))
+    finally:
+        conn.close()
 
 
 # Settings Routes
@@ -3430,6 +3881,9 @@ def create_backup():
             '--no-acl',  # Don't output access privileges
             '--clean',  # Add DROP statements before CREATE
             '--if-exists',  # Use IF EXISTS for DROP statements
+            # Transient job queue: keep the table structure but not its rows
+            # (they reference regenerable export files that aren't backed up).
+            '--exclude-table-data=export_jobs',
             '--no-password',
             '--verbose'
         ]
@@ -3503,12 +3957,13 @@ def create_backup_sql():
 
         # Get list of all tables
         cur.execute("""
-            SELECT tablename 
-            FROM pg_tables 
-            WHERE schemaname = 'public' 
+            SELECT tablename
+            FROM pg_tables
+            WHERE schemaname = 'public'
             ORDER BY tablename
         """)
-        tables = [row[0] for row in cur.fetchall()]
+        # Skip export_jobs: transient job-queue data, not worth backing up.
+        tables = [row[0] for row in cur.fetchall() if row[0] != 'export_jobs']
 
         exported_tables = []
 
@@ -4860,5 +5315,9 @@ if __name__ == '__main__':
     print("\n" + "=" * 60)
     print("Starting Flask development server on http://0.0.0.0:5000")
     print("=" * 60 + "\n")
+
+    # Start the in-process export worker so background exports work when running
+    # the dev server directly (no separate worker process).
+    ensure_inline_export_worker()
 
     app.run(host='0.0.0.0', port=5000, debug=False)

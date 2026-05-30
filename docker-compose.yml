@@ -32,6 +32,11 @@ services:
       FLASK_ENV: production
       BACKUP_DIR: ${BACKUP_DIR:-/mnt/medical_backups/raman_backups}
       BACKUP_RETENTION_DAYS: ${BACKUP_RETENTION_DAYS:-90}
+      EXPORT_DIRECTORY: ${EXPORT_DIRECTORY:-/exports}
+      EXPORT_RETENTION_HOURS: ${EXPORT_RETENTION_HOURS:-24}
+      # The dedicated export_worker container consumes the queue, so the web
+      # process should not also run an in-process worker.
+      EXPORT_INLINE_WORKER: "false"
     ports:
       - "5000:5000"
     networks:
@@ -40,6 +45,7 @@ services:
       - .:/app
       - ./backups:/backups
       - ./uploads:/app/uploads
+      - ./exports:/exports
       - /mnt/medical_backups:/mnt/medical_backups
 #    depends_on:  # Uncomment if using internal postgres service
 #      postgres:
@@ -50,6 +56,35 @@ services:
       interval: 30s
       timeout: 3s
       retries: 3
+
+  # Background export worker: generates large export files off the request path
+  # and writes them to the shared ./exports volume for download via the web app.
+  export_worker:
+    build: .
+    container_name: medical_export_worker
+    command: python worker.py
+    environment:
+      DB_NAME: ${DB_NAME:-raman_research_prod}
+      DB_USER: ${DB_USER:-postgres}
+      DB_PASSWORD: ${DB_PASSWORD}
+      DB_HOST: ${DB_HOST:-postgres_container}
+      DB_PORT: ${DB_PORT:-5432}
+      SECRET_KEY: ${SECRET_KEY}
+      FLASK_ENV: production
+      RAMAN_ROLE: worker
+      EXPORT_DIRECTORY: ${EXPORT_DIRECTORY:-/exports}
+      EXPORT_RETENTION_HOURS: ${EXPORT_RETENTION_HOURS:-24}
+    networks:
+      - medical_network
+    volumes:
+      - .:/app
+      - ./exports:/exports
+    # Start only after web is healthy, so the web service has already created
+    # the database tables (the worker does no DB initialization itself).
+    depends_on:
+      web:
+        condition: service_healthy
+    restart: unless-stopped
 
   nginx:
     image: nginx:alpine

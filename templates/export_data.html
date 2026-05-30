@@ -590,6 +590,13 @@
                 </div>
             </div>
 
+            <div class="checkbox-item" style="margin: 10px 0;">
+                <input type="checkbox" id="background_export" name="background_export">
+                <label for="background_export">
+                    Generate in background (recommended for large exports) &mdash; you'll see a progress bar and a download link when it's ready
+                </label>
+            </div>
+
             <div class="export-buttons">
                 <button type="button" class="btn btn-secondary" onclick="window.location.href='{{ url_for('dashboard') }}'">Cancel</button>
                 <button type="submit" class="btn-export">
@@ -598,6 +605,21 @@
                 </button>
             </div>
         </form>
+
+        <!-- Background export progress panel -->
+        <div id="exportProgressPanel" style="display:none; margin-top: 20px; padding: 20px; border: 1px solid #d0d7de; border-radius: 8px; background: #f6f8fa;">
+            <h3 style="margin-top:0;">Export in progress</h3>
+            <div id="exportProgressStatus" style="margin-bottom: 10px; color: #444;">Starting…</div>
+            <div style="background:#e1e4e8; border-radius: 6px; overflow: hidden; height: 22px;">
+                <div id="exportProgressBar" style="width:0%; height:100%; background:#2ecc71; transition: width .4s ease; text-align:center; color:#fff; font-size: 13px; line-height: 22px;">0%</div>
+            </div>
+            <div id="exportProgressCount" style="margin-top: 8px; font-size: 13px; color: #666;"></div>
+            <div id="exportProgressActions" style="margin-top: 15px;">
+                <a id="exportDownloadLink" href="#" style="display:none;" class="btn-export">⬇ Download export</a>
+                <button type="button" id="exportCancelBtn" class="btn btn-secondary" style="display:none;">Cancel export</button>
+                <button type="button" id="exportDismissBtn" class="btn btn-secondary" style="display:none;">Dismiss</button>
+            </div>
+        </div>
     </div>
 </div>
 
@@ -616,19 +638,139 @@ function toggleFilterSection(sectionId) {
     }
 }
 
-document.getElementById('exportForm').addEventListener('submit', function(e) {
-    // Show loading indicator
-    const button = e.target.querySelector('.btn-export');
-    const originalText = button.innerHTML;
-    button.innerHTML = '<span>⏳</span><span>Generating Export...</span>';
-    button.disabled = true;
+const exportForm = document.getElementById('exportForm');
+let exportPollTimer = null;
+let currentJobId = null;
 
-    // Re-enable after a timeout (in case of error)
-    setTimeout(() => {
-        button.innerHTML = originalText;
-        button.disabled = false;
-    }, 10000);
+exportForm.addEventListener('submit', function(e) {
+    const background = document.getElementById('background_export').checked;
+
+    if (!background) {
+        // Synchronous (streamed) download - let the browser submit normally.
+        const button = e.target.querySelector('.btn-export');
+        const originalText = button.innerHTML;
+        button.innerHTML = '<span>⏳</span><span>Generating Export...</span>';
+        button.disabled = true;
+        setTimeout(() => {
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }, 10000);
+        return;
+    }
+
+    // Background export: queue a job and poll for progress.
+    e.preventDefault();
+    startBackgroundExport();
 });
+
+async function startBackgroundExport() {
+    const panel = document.getElementById('exportProgressPanel');
+    const bar = document.getElementById('exportProgressBar');
+    const statusEl = document.getElementById('exportProgressStatus');
+    const countEl = document.getElementById('exportProgressCount');
+    const downloadLink = document.getElementById('exportDownloadLink');
+    const cancelBtn = document.getElementById('exportCancelBtn');
+    const dismissBtn = document.getElementById('exportDismissBtn');
+
+    // Reset UI
+    panel.style.display = 'block';
+    bar.style.width = '0%';
+    bar.textContent = '0%';
+    bar.style.background = '#2ecc71';
+    statusEl.textContent = 'Queuing export…';
+    countEl.textContent = '';
+    downloadLink.style.display = 'none';
+    dismissBtn.style.display = 'none';
+    cancelBtn.style.display = 'none';
+    panel.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+
+    try {
+        const formData = new FormData(exportForm);
+        const resp = await fetch("{{ url_for('export_start') }}", { method: 'POST', body: formData });
+        if (!resp.ok) {
+            const err = await resp.json().catch(() => ({}));
+            statusEl.textContent = 'Failed to start export: ' + (err.error || resp.status);
+            dismissBtn.style.display = 'inline-block';
+            return;
+        }
+        const data = await resp.json();
+        currentJobId = data.job_id;
+        cancelBtn.style.display = 'inline-block';
+        pollExportStatus();
+    } catch (err) {
+        statusEl.textContent = 'Failed to start export: ' + err.message;
+        dismissBtn.style.display = 'inline-block';
+    }
+}
+
+function pollExportStatus() {
+    if (!currentJobId) return;
+    const bar = document.getElementById('exportProgressBar');
+    const statusEl = document.getElementById('exportProgressStatus');
+    const countEl = document.getElementById('exportProgressCount');
+    const downloadLink = document.getElementById('exportDownloadLink');
+    const cancelBtn = document.getElementById('exportCancelBtn');
+    const dismissBtn = document.getElementById('exportDismissBtn');
+
+    fetch("{{ url_for('export_status', job_id='__JOB__') }}".replace('__JOB__', currentJobId))
+        .then(r => r.json())
+        .then(job => {
+            const pct = job.percent || 0;
+            bar.style.width = pct + '%';
+            bar.textContent = pct + '%';
+            if (job.rows_total) {
+                countEl.textContent = (job.rows_done || 0).toLocaleString() + ' / ' +
+                                      job.rows_total.toLocaleString() + ' patients';
+            }
+
+            if (job.status === 'pending') {
+                statusEl.textContent = 'Waiting in queue…';
+            } else if (job.status === 'running') {
+                statusEl.textContent = 'Generating export…';
+            } else if (job.status === 'done') {
+                clearTimeout(exportPollTimer);
+                statusEl.textContent = '✓ Export ready';
+                cancelBtn.style.display = 'none';
+                dismissBtn.style.display = 'inline-block';
+                downloadLink.href = "{{ url_for('export_download', job_id='__JOB__') }}".replace('__JOB__', currentJobId);
+                downloadLink.style.display = 'inline-block';
+                return;
+            } else if (job.status === 'cancelled') {
+                clearTimeout(exportPollTimer);
+                bar.style.background = '#e67e22';
+                statusEl.textContent = 'Export cancelled.';
+                cancelBtn.style.display = 'none';
+                dismissBtn.style.display = 'inline-block';
+                return;
+            } else if (job.status === 'failed') {
+                clearTimeout(exportPollTimer);
+                bar.style.background = '#e74c3c';
+                statusEl.textContent = 'Export failed: ' + (job.error || 'unknown error');
+                cancelBtn.style.display = 'none';
+                dismissBtn.style.display = 'inline-block';
+                return;
+            }
+            exportPollTimer = setTimeout(pollExportStatus, 1500);
+        })
+        .catch(() => {
+            // transient error - keep trying
+            exportPollTimer = setTimeout(pollExportStatus, 3000);
+        });
+}
+
+document.getElementById('exportCancelBtn').addEventListener('click', function() {
+    if (!currentJobId) return;
+    this.disabled = true;
+    fetch("{{ url_for('export_cancel', job_id='__JOB__') }}".replace('__JOB__', currentJobId), { method: 'POST' })
+        .finally(() => { this.disabled = false; });
+});
+
+document.getElementById('exportDismissBtn').addEventListener('click', function() {
+    clearTimeout(exportPollTimer);
+    currentJobId = null;
+    document.getElementById('exportProgressPanel').style.display = 'none';
+});
+
 </script>
 
 {% endblock %}

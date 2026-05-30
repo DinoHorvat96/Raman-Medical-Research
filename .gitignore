@@ -33,3 +33,6 @@ venv.bak/
 *~
 .DS_Store
 *.bkp
+
+# Generated export files (produced by the export worker, served for download)
+exports/
