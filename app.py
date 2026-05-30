@@ -2661,79 +2661,15 @@ def export_data():
 
             base_query += ' ORDER BY ps.patient_id'
 
-            cur.execute(base_query, params)
-            patients_data = cur.fetchall()
-
             # ============================================================
-            # STEP 3: Preload all patient-related data for performance
+            # STEP 3: (removed) Patient rows are no longer fetched eagerly.
             # ============================================================
-
-            patient_ids = [p['patient_id'] for p in patients_data]
-
-            # Preload other ocular conditions
-            patient_ocular_conditions = {}
-            if include_other_conditions and patient_ids:
-                cur.execute('''
-                    SELECT patient_id, icd10_code, eye 
-                    FROM other_ocular_conditions 
-                    WHERE patient_id = ANY(%s)
-                ''', (patient_ids,))
-                for row in cur.fetchall():
-                    if row['patient_id'] not in patient_ocular_conditions:
-                        patient_ocular_conditions[row['patient_id']] = []
-                    patient_ocular_conditions[row['patient_id']].append(row)
-
-            # Preload surgeries
-            patient_surgeries = {}
-            if include_surgeries and patient_ids:
-                cur.execute('''
-                    SELECT patient_id, surgery_code, eye 
-                    FROM previous_ocular_surgeries 
-                    WHERE patient_id = ANY(%s)
-                ''', (patient_ids,))
-                for row in cur.fetchall():
-                    if row['patient_id'] not in patient_surgeries:
-                        patient_surgeries[row['patient_id']] = []
-                    patient_surgeries[row['patient_id']].append(row)
-
-            # Preload systemic conditions
-            patient_systemic = {}
-            if include_systemic and patient_ids:
-                cur.execute('''
-                    SELECT patient_id, icd10_code 
-                    FROM systemic_conditions 
-                    WHERE patient_id = ANY(%s)
-                ''', (patient_ids,))
-                for row in cur.fetchall():
-                    if row['patient_id'] not in patient_systemic:
-                        patient_systemic[row['patient_id']] = []
-                    patient_systemic[row['patient_id']].append(row)
-
-            # Preload ocular medications
-            patient_ocular_meds = {}
-            if include_medications and patient_ids:
-                cur.execute('''
-                    SELECT patient_id, generic_name, eye, last_application_days 
-                    FROM ocular_medications 
-                    WHERE patient_id = ANY(%s)
-                ''', (patient_ids,))
-                for row in cur.fetchall():
-                    if row['patient_id'] not in patient_ocular_meds:
-                        patient_ocular_meds[row['patient_id']] = []
-                    patient_ocular_meds[row['patient_id']].append(row)
-
-            # Preload systemic medications
-            patient_systemic_meds = {}
-            if include_medications and patient_ids:
-                cur.execute('''
-                    SELECT patient_id, generic_name, last_application_days 
-                    FROM systemic_medications 
-                    WHERE patient_id = ANY(%s)
-                ''', (patient_ids,))
-                for row in cur.fetchall():
-                    if row['patient_id'] not in patient_systemic_meds:
-                        patient_systemic_meds[row['patient_id']] = []
-                    patient_systemic_meds[row['patient_id']].append(row)
+            # The base query is executed lazily via a server-side cursor in
+            # STEP 5 and consumed in chunks; each chunk's related data
+            # (conditions / surgeries / medications) is preloaded per-chunk.
+            # This keeps peak memory proportional to the chunk size instead of
+            # the total number of patients, so the export scales to very large
+            # datasets rather than building the whole result set in RAM.
 
             # ============================================================
             # STEP 4: Build column headers (BINARY FORMAT)
@@ -2823,16 +2759,25 @@ def export_data():
                     final_columns.append(f'takes_{safe_generic}')
 
             # ============================================================
-            # STEP 5: Build export data with binary values
+            # STEP 5: Stream patient rows (chunked) instead of materialising
+            #         the entire dataset in memory
             # ============================================================
 
-            export_data = []
+            CHUNK_SIZE = 500
 
-            for patient in patients_data:
-                # Initialize row with all columns set to default values
+            def _index_by_patient(rows):
+                """Group related rows into {patient_id: [rows]}."""
+                grouped = {}
+                for related in rows:
+                    grouped.setdefault(related['patient_id'], []).append(related)
+                return grouped
+
+            def build_row(patient, ocular_map, surgery_map, systemic_map,
+                          ocular_med_map, systemic_med_map):
+                """Build one binary-format export row for a single patient."""
                 row = {}
 
-                # Fill base patient data
+                # Fill base patient data / defaults
                 for col in final_columns:
                     if col in patient:
                         value = patient[col]
@@ -2841,102 +2786,160 @@ def export_data():
                             row[col] = value.strftime('%Y-%m-%d')
                         else:
                             row[col] = value
-                    elif col.endswith('_eye'):
+                    elif col.endswith('_eye') or col.endswith('_days'):
                         row[col] = 'ND'
-                    elif col.endswith('_days'):
-                        row[col] = 'ND'
-                    elif col.startswith('other_ocular_') or col.startswith('surgery_') or \
-                            col.startswith('systemic_') or col.startswith('ocular_med_') or \
-                            col.startswith('systemic_med_'):
-                        # Binary columns default to 0
-                        if not col.endswith('_eye') and not col.endswith('_days'):
-                            row[col] = 0
-                        else:
-                            row[col] = 'ND'
+                    elif col.startswith(('other_ocular_', 'surgery_', 'systemic_',
+                                         'ocular_med_', 'systemic_med_')):
+                        # Binary presence columns default to 0
+                        row[col] = 0
                     else:
                         row[col] = ''
 
-                # Fill other ocular conditions (BINARY)
+                pid = patient['patient_id']
+
+                # Other ocular conditions (BINARY)
                 if include_other_conditions:
-                    for cond in patient_ocular_conditions.get(patient['patient_id'], []):
+                    for cond in ocular_map.get(pid, []):
                         safe_code = make_safe_column_name(cond['icd10_code'])
                         row[f'other_ocular_{safe_code}'] = 1
                         row[f'other_ocular_{safe_code}_eye'] = cond['eye']
 
-                # Fill surgeries (BINARY)
+                # Surgeries (BINARY)
                 if include_surgeries:
-                    for surgery in patient_surgeries.get(patient['patient_id'], []):
+                    for surgery in surgery_map.get(pid, []):
                         safe_surgery = make_safe_column_name(surgery['surgery_code'])
                         row[f'surgery_{safe_surgery}'] = 1
                         row[f'surgery_{safe_surgery}_eye'] = surgery['eye']
 
-                # Fill systemic conditions (BINARY)
+                # Systemic conditions (BINARY)
                 if include_systemic:
-                    for cond in patient_systemic.get(patient['patient_id'], []):
+                    for cond in systemic_map.get(pid, []):
                         safe_code = make_safe_column_name(cond['icd10_code'])
                         row[f'systemic_{safe_code}'] = 1
 
-                # Fill ocular medications (BINARY)
+                # Ocular + systemic medications (BINARY)
                 if include_medications:
-                    for med in patient_ocular_meds.get(patient['patient_id'], []):
+                    for med in ocular_med_map.get(pid, []):
                         safe_med = make_safe_column_name(med['generic_name'])
                         row[f'ocular_med_{safe_med}'] = 1
                         row[f'ocular_med_{safe_med}_eye'] = med['eye']
                         row[f'ocular_med_{safe_med}_days'] = med['last_application_days']
-
-                # Fill systemic medications (BINARY)
-                if include_medications:
-                    for med in patient_systemic_meds.get(patient['patient_id'], []):
+                    for med in systemic_med_map.get(pid, []):
                         safe_med = make_safe_column_name(med['generic_name'])
                         row[f'systemic_med_{safe_med}'] = 1
                         row[f'systemic_med_{safe_med}_days'] = med['last_application_days']
 
-                # Extract and fill generic components
-                if include_medications:
-                    # Combine all patient medications
-                    patient_all_meds = []
-
-                    # Add ocular medications
-                    for med in patient_ocular_meds.get(patient['patient_id'], []):
-                        patient_all_meds.append({
-                            'generic_name': med['generic_name']
-                        })
-
-                    # Add systemic medications
-                    for med in patient_systemic_meds.get(patient['patient_id'], []):
-                        patient_all_meds.append({
-                            'generic_name': med['generic_name']
-                        })
-
-                    # Extract generic components dynamically
-                    generic_flags = extract_generic_components_dynamic(patient_all_meds, all_generic_components)
-
-                    # Add to row
+                    # Generic drug components (BINARY)
+                    patient_all_meds = [{'generic_name': med['generic_name']}
+                                        for med in ocular_med_map.get(pid, [])]
+                    patient_all_meds += [{'generic_name': med['generic_name']}
+                                         for med in systemic_med_map.get(pid, [])]
+                    generic_flags = extract_generic_components_dynamic(
+                        patient_all_meds, all_generic_components)
                     for key, value in generic_flags.items():
                         if key in final_columns:
                             row[key] = value
 
-                export_data.append(row)
+                return row
+
+            def generate_export_rows():
+                """Yield export rows one at a time.
+
+                Patients are read through a server-side cursor and processed in
+                chunks of CHUNK_SIZE; each chunk's related data is preloaded with
+                a handful of ANY(%s) queries. Peak memory therefore stays
+                proportional to the chunk size rather than the total patient
+                count. Owns the DB connection and closes it once the stream is
+                fully consumed (or the client disconnects mid-download).
+                """
+                stream_cur = conn.cursor(name='export_patient_stream',
+                                         cursor_factory=RealDictCursor)
+                stream_cur.itersize = CHUNK_SIZE
+                try:
+                    stream_cur.execute(base_query, params)
+                    while True:
+                        chunk = stream_cur.fetchmany(CHUNK_SIZE)
+                        if not chunk:
+                            break
+
+                        chunk_ids = [p['patient_id'] for p in chunk]
+
+                        ocular_map = {}
+                        if include_other_conditions:
+                            cur.execute('SELECT patient_id, icd10_code, eye '
+                                        'FROM other_ocular_conditions WHERE patient_id = ANY(%s)',
+                                        (chunk_ids,))
+                            ocular_map = _index_by_patient(cur.fetchall())
+
+                        surgery_map = {}
+                        if include_surgeries:
+                            cur.execute('SELECT patient_id, surgery_code, eye '
+                                        'FROM previous_ocular_surgeries WHERE patient_id = ANY(%s)',
+                                        (chunk_ids,))
+                            surgery_map = _index_by_patient(cur.fetchall())
+
+                        systemic_map = {}
+                        if include_systemic:
+                            cur.execute('SELECT patient_id, icd10_code '
+                                        'FROM systemic_conditions WHERE patient_id = ANY(%s)',
+                                        (chunk_ids,))
+                            systemic_map = _index_by_patient(cur.fetchall())
+
+                        ocular_med_map = {}
+                        systemic_med_map = {}
+                        if include_medications:
+                            cur.execute('SELECT patient_id, generic_name, eye, last_application_days '
+                                        'FROM ocular_medications WHERE patient_id = ANY(%s)',
+                                        (chunk_ids,))
+                            ocular_med_map = _index_by_patient(cur.fetchall())
+                            cur.execute('SELECT patient_id, generic_name, last_application_days '
+                                        'FROM systemic_medications WHERE patient_id = ANY(%s)',
+                                        (chunk_ids,))
+                            systemic_med_map = _index_by_patient(cur.fetchall())
+
+                        for patient in chunk:
+                            yield build_row(patient, ocular_map, surgery_map,
+                                            systemic_map, ocular_med_map, systemic_med_map)
+                finally:
+                    for closeable in (stream_cur, cur, conn):
+                        try:
+                            closeable.close()
+                        except Exception:
+                            pass
 
             # ============================================================
-            # STEP 6: Generate export file
+            # STEP 6: Generate export file (streamed from the row generator)
             # ============================================================
+
+            from flask import Response, stream_with_context
+
+            filename_type = 'sensitive' if data_type == 'sensitive' else 'anonymized'
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
             if export_format == 'csv':
-                # Generate CSV
-                output = io.StringIO()
-                if export_data:
-                    writer = csv.DictWriter(output, fieldnames=final_columns, extrasaction='ignore')
+                # Stream the CSV row-by-row: nothing larger than a single row is
+                # held in memory and the download begins immediately. The DB
+                # connection is owned (and closed) by generate_export_rows().
+                def csv_stream():
+                    buffer = io.StringIO()
+                    writer = csv.DictWriter(buffer, fieldnames=final_columns,
+                                            extrasaction='ignore')
                     writer.writeheader()
-                    writer.writerows(export_data)
+                    yield buffer.getvalue()
+                    buffer.seek(0)
+                    buffer.truncate(0)
 
-                from flask import Response
-                filename_type = 'sensitive' if data_type == 'sensitive' else 'anonymized'
+                    for data_row in generate_export_rows():
+                        writer.writerow(data_row)
+                        yield buffer.getvalue()
+                        buffer.seek(0)
+                        buffer.truncate(0)
+
                 return Response(
-                    output.getvalue(),
+                    stream_with_context(csv_stream()),
                     mimetype='text/csv',
                     headers={
-                        'Content-Disposition': f'attachment; filename=raman_export_binary_{filename_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.csv'
+                        'Content-Disposition': f'attachment; filename=raman_export_binary_{filename_type}_{timestamp}.csv'
                     }
                 )
 
@@ -2946,52 +2949,49 @@ def export_data():
                     from openpyxl import Workbook
                     from openpyxl.cell import WriteOnlyCell
                     from openpyxl.styles import Font, PatternFill, Alignment
-
-                    # write_only mode streams rows to disk instead of keeping a Cell
-                    # object for every cell in memory. With one binary column per
-                    # ICD-10 code / surgery / medication the column count runs into
-                    # the thousands, so the standard workbook can exhaust memory and
-                    # blow past the request timeout on large exports.
-                    wb = Workbook(write_only=True)
-                    ws = wb.create_sheet("Patient Data")
-
-                    if export_data:
-                        # Write headers
-                        header_fill = PatternFill(start_color="3498db", end_color="3498db", fill_type="solid")
-                        header_font = Font(bold=True, color="FFFFFF")
-                        header_alignment = Alignment(horizontal='center')
-
-                        header_cells = []
-                        for fieldname in final_columns:
-                            cell = WriteOnlyCell(ws, value=fieldname)
-                            cell.fill = header_fill
-                            cell.font = header_font
-                            cell.alignment = header_alignment
-                            header_cells.append(cell)
-                        ws.append(header_cells)
-
-                        # Write data (one row at a time, in column order)
-                        for data_row in export_data:
-                            ws.append([data_row.get(fieldname, '') for fieldname in final_columns])
-
-                    # Save to BytesIO
-                    excel_output = io.BytesIO()
-                    wb.save(excel_output)
-                    excel_output.seek(0)
-
-                    from flask import Response
-                    filename_type = 'sensitive' if data_type == 'sensitive' else 'anonymized'
-                    return Response(
-                        excel_output.getvalue(),
-                        mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-                        headers={
-                            'Content-Disposition': f'attachment; filename=raman_export_binary_{filename_type}_{datetime.now().strftime("%Y%m%d_%H%M%S")}.xlsx'
-                        }
-                    )
-
                 except ImportError:
+                    conn.close()
                     flash('Excel export requires openpyxl. Please run: pip install openpyxl', 'error')
                     return redirect(url_for('export_data'))
+
+                # write_only mode streams cells to a temp file instead of keeping
+                # a Cell object for every cell in memory. Combined with the chunked
+                # row generator, peak memory no longer scales with the patient
+                # count. (xlsx is a zip and can't be streamed to the client
+                # progressively, so it is assembled then sent; for very large
+                # dumps prefer CSV.)
+                wb = Workbook(write_only=True)
+                ws = wb.create_sheet("Patient Data")
+
+                header_fill = PatternFill(start_color="3498db", end_color="3498db", fill_type="solid")
+                header_font = Font(bold=True, color="FFFFFF")
+                header_alignment = Alignment(horizontal='center')
+
+                header_cells = []
+                for fieldname in final_columns:
+                    cell = WriteOnlyCell(ws, value=fieldname)
+                    cell.fill = header_fill
+                    cell.font = header_font
+                    cell.alignment = header_alignment
+                    header_cells.append(cell)
+                ws.append(header_cells)
+
+                # Consuming the generator writes one row at a time and closes the
+                # DB connection when exhausted.
+                for data_row in generate_export_rows():
+                    ws.append([data_row.get(fieldname, '') for fieldname in final_columns])
+
+                excel_output = io.BytesIO()
+                wb.save(excel_output)
+                excel_output.seek(0)
+
+                return Response(
+                    excel_output.getvalue(),
+                    mimetype='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+                    headers={
+                        'Content-Disposition': f'attachment; filename=raman_export_binary_{filename_type}_{timestamp}.xlsx'
+                    }
+                )
 
         cur.close()
         conn.close()
