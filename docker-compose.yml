@@ -38,7 +38,9 @@ services:
       # process should not also run an in-process worker.
       EXPORT_INLINE_WORKER: "false"
     ports:
-      - "5000:5000"
+      # Host port -> gunicorn (container listens on 5000 internally).
+      # Direct access to the app, bypassing nginx. Override with WEB_PORT in .env.
+      - "${WEB_PORT:-5000}:5000"
     networks:
       - medical_network
     volumes:
@@ -63,6 +65,11 @@ services:
     build: .
     container_name: medical_export_worker
     command: python worker.py
+    # The image's healthcheck curls the web server on :5000, but this container
+    # runs the worker (no web server), so that check would always fail. Disable
+    # it — the worker self-heals via restart and stale-job reclaim.
+    healthcheck:
+      disable: true
     environment:
       DB_NAME: ${DB_NAME:-raman_research_prod}
       DB_USER: ${DB_USER:-postgres}
