@@ -90,7 +90,9 @@ services:
     image: nginx:alpine
     container_name: medical_nginx
     ports:
-      - "80:80"
+      # Host port 8099 -> nginx (container still listens on 80 internally).
+      # Numerous web apps already use host port 80. Override with HTTP_PORT in .env.
+      - "${HTTP_PORT:-8099}:80"
       # - "8443:443"  # Uncomment when SSL is configured
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
