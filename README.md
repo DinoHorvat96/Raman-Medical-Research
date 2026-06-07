@@ -19,6 +19,8 @@ Raman is a professional medical research database designed specifically for coll
 - **Bulk import/export system** with CSV and Excel formats
 - **Complete reference data management** for codes, medications, and surgeries
 - **Advanced filtering system** for patient searches and data exports
+- **Memory-efficient streaming exports** that scale to very large datasets without timeouts
+- **Background export jobs** with a live progress bar, cancellation, and download links
 - **Automated backup & restore** with scheduling support and external drive detection
 - **Advanced form validation** with real-time feedback
 
@@ -44,11 +46,13 @@ The internal HTTP/1.1 connection between Nginx and Gunicorn has **no performance
 - **Single connection** for all resources (vs multiple in HTTP/1.1)
 
 ### Quick HTTP/2 Setup
-See the **HTTP/2 Setup Guide** artifact for detailed instructions. Basic steps:
-1. Obtain SSL certificate (Let's Encrypt or self-signed)
-2. Uncomment HTTPS server block in `nginx.conf`
-3. Update certificate paths
-4. Restart services: `docker-compose restart nginx`
+The bundled `nginx.conf` is intentionally **minimal (HTTP/1.1)** for reliability
+across hosts (including ARM / Raspberry Pi, where stray `listen [::]:80` IPv6
+directives can crash nginx). HTTP/2 is opt-in once you add TLS:
+1. Obtain an SSL certificate (Let's Encrypt or self-signed)
+2. Add an HTTPS `server { listen 443 ssl http2; ... }` block to `nginx.conf`, proxying to the same `raman_app` upstream
+3. Mount your certificates into the nginx container (uncomment the `./ssl` volume in `docker-compose.yml`)
+4. Restart services: `docker compose restart nginx`
 5. Verify: `curl -I --http2 https://your-domain.com`
 
 ## 📋 Database Architecture
@@ -141,6 +145,21 @@ All related data automatically deleted when patient is deleted.
 - **medications**: HALMED medication registry (bulk import supported)
 - **surgeries**: Ocular surgical procedures
 
+### Operational Tables
+
+#### 14. **export_jobs** (Background Export Queue)
+Tracks queued/running background export jobs. **Self-migrating** — created
+automatically on startup via `CREATE TABLE IF NOT EXISTS`, so deploying this
+feature onto an existing database requires no manual migration.
+- `job_id` (UUID), `requested_by`, `params` (JSON), `status` (pending / running / done / failed / cancelled)
+- `rows_total`, `rows_done` (for progress reporting), `file_path`, `expires_at`, `cancel_requested`
+- Transient operational data — **excluded from backups** (the table structure is
+  kept, but not its rows, which reference regenerable export files)
+
+> **Schema versioning note:** every table is created with `CREATE TABLE IF NOT
+> EXISTS` on startup, so new tables are added automatically on deploy without a
+> separate migration step.
+
 ## 🚀 Getting Started
 
 ### Prerequisites
@@ -162,8 +181,21 @@ DB_HOST=postgres_container
 SECRET_KEY=$(openssl rand -base64 32)
 STARTING_PATIENT_ID=1500
 BACKUP_DIR=/mnt/medical_backups/raman_backups
+
+# Published host ports (change if they conflict with other apps)
+HTTP_PORT=8099          # nginx front door
+WEB_PORT=5000           # direct gunicorn access
+
+# Background export settings
+EXPORT_DIRECTORY=/exports        # where generated export files are stored
+EXPORT_RETENTION_HOURS=24        # auto-delete generated exports after N hours
+# EXPORT_INLINE_WORKER=false     # set on the web service when using the export_worker container
 EOF
 ```
+
+> **Tip:** all ports are configurable, so the stack can run alongside other apps
+> (e.g. on Unraid, where port 80 is taken by the web UI). See `.env.example` for
+> the full, documented list of variables.
 
 2. **Start services**:
 ```bash
@@ -171,19 +203,24 @@ docker-compose up -d
 ```
 
 3. **Access application**:
-- HTTP: http://localhost:80
+- Via nginx (recommended front door): `http://localhost:8099` (set by `HTTP_PORT`)
+- Direct to the app, bypassing nginx: `http://localhost:5000` (set by `WEB_PORT`)
 - Login: `Admin` / `admin123`
 - **Change default password immediately!**
 
-4. **Enable HTTP/2** (optional, recommended):
+> nginx is optional — it's a reverse proxy in front of the app. If you front the
+> app with something else (Cloudflare, Nginx Proxy Manager, SWAG, etc.) or only
+> need internal access, you can run without it and point users at `WEB_PORT`.
+
+4. **Enable HTTP/2** (optional):
 ```bash
 # Get SSL certificate
 sudo certbot certonly --standalone -d your-domain.com
 
-# Update nginx.conf (uncomment HTTPS section)
-# Update docker-compose.yml (uncomment SSL volume)
+# Add an HTTPS server block (listen 443 ssl http2;) to nginx.conf
+# Mount the certs into the nginx container (uncomment the ./ssl volume in docker-compose.yml)
 # Restart
-docker-compose restart nginx
+docker compose restart nginx
 
 # Verify
 curl -I --http2 https://your-domain.com
@@ -300,6 +337,37 @@ gunicorn --config gunicorn_config.py app:app
 - **Generic component extraction**: Individual drug tracking
 - **Audit-friendly filenames**: Includes type and timestamp
 
+#### Export Modes
+- **Synchronous (streamed)**: generated on the fly and streamed straight to the
+  browser — ideal for small/medium pulls. Rows stream in chunks, so memory stays
+  flat regardless of dataset size and the download starts immediately.
+- **Background job** (recommended for large exports): tick *"Generate in
+  background"*. The job is queued and produced by a dedicated worker while you
+  watch a **live progress bar** (X / Y patients), with the ability to **cancel**
+  and a **download link** when it's ready. This survives full-database dumps that
+  would otherwise exceed request timeouts.
+
+#### Large-Dataset Handling
+- **Chunked, server-side-cursor streaming**: peak memory is proportional to a
+  small chunk (default 500 rows), not the total patient count — so exports scale
+  toward the 99,999-patient ceiling without exhausting RAM
+- **openpyxl write-only mode** keeps Excel generation memory-flat
+- **Atomic file writes**: files are written to a temporary name and renamed on
+  completion, so a crash or cancellation never leaves a half-written download
+- **Self-cleaning storage**: generated files auto-expire (default 24h) and are
+  swept by the worker, along with any orphaned/partial files
+- **Resilient queue**: jobs are claimed with `FOR UPDATE SKIP LOCKED` (no
+  double-processing), and jobs left running by a crashed worker are automatically
+  requeued
+
+#### How the background worker runs
+- **In-process worker** (default): a worker thread runs inside the app, so
+  background exports work out of the box (development or single-process deploys)
+- **Dedicated `export_worker` container** (production): set
+  `EXPORT_INLINE_WORKER=false` on the web service so only the container consumes
+  the queue. It does no DB initialization and starts after the web service is
+  healthy, so there are no first-boot races.
+
 ### 3. Bulk Import/Export
 
 #### ICD-10 Management
@@ -327,6 +395,8 @@ gunicorn --config gunicorn_config.py app:app
 - **Drive detection**: Real-time external drive status
 - **Retention management**: Auto-delete old backups
 - **Space verification**: Check available space
+- **Full `pg_dump` + CSV fallback**: complete database dump, or a per-table CSV export if `pg_dump` is unavailable
+- **Transient data excluded**: the background-export queue (`export_jobs`) is skipped, so only real research data is backed up — restores recreate the (empty) queue table automatically
 
 #### Restore Features
 - One-click restore
@@ -343,6 +413,11 @@ All manageable through Settings interface:
 - **Medications**: Trade/generic names, HALMED compatible, bulk import
 - **Surgical Procedures**: Codes, descriptions, categories
 
+These reference lists are the single source of truth for the dropdowns used
+**both** when creating patients (New Patient) **and** when editing/verifying them
+(Validate Data) — so any code you add (including via bulk import) is immediately
+selectable everywhere, with no hardcoded subsets.
+
 ### 6. Advanced Search & Filtering
 
 - Search by: Patient ID, Name, MBO
@@ -358,34 +433,53 @@ All manageable through Settings interface:
 
 ### Services
 ```yaml
-web:        # Flask + Gunicorn
-nginx:      # Reverse proxy with HTTP/2
-postgres:   # Optional internal database
+web:             # Flask + Gunicorn (the application itself)
+export_worker:   # Background export job processor (consumes the export queue)
+nginx:           # Reverse proxy / front door (optional)
+postgres:        # Optional internal database (commented out by default)
 ```
 
 ### Features
-- HTTP/2 support when SSL configured
+- **Configurable host ports** via `HTTP_PORT` / `WEB_PORT` (avoid conflicts with other apps)
+- **Dedicated export worker** container for off-request-path background exports
+- **`.dockerignore`** keeps secrets (`.env`), the Postgres data dir, and backups/exports out of the build context (smaller, safer builds)
 - Health checks
 - Auto-restart
-- Persistent volumes (backups, uploads)
+- Persistent volumes (backups, uploads, exports)
 - Network isolation
+
+### Build context note
+The `.dockerignore` excludes `postgres_data/`, `backups/`, `exports/`, `.env`,
+and other runtime data. If you enable the internal Postgres service, **do not**
+`chmod` its data directory to work around build errors — Postgres requires it to
+stay `0700`; the `.dockerignore` is what keeps it out of the build context.
+
+> **Command note:** modern Docker uses `docker compose` (v2, a space). Some
+> hosts (e.g. Unraid via the Compose plugin) provide the older `docker-compose`
+> (v1, a hyphen). Use whichever prints a version from `docker compose version` /
+> `docker-compose version`. Examples below use the v2 form.
 
 ### Commands
 ```bash
-# Start
-docker-compose up -d
+# Start (build images + create containers, incl. export_worker)
+docker compose up -d --build
 
-# View logs
-docker-compose logs -f
+# View logs (all services, or one)
+docker compose logs -f
+docker compose logs -f export_worker
+
+# Status
+docker compose ps
+
+# Restart just one service after a config change (bind-mounted code/conf)
+docker compose restart web
+docker compose restart nginx
 
 # Stop
-docker-compose down
+docker compose down
 
-# Rebuild
-docker-compose up -d --build
-
-# Check HTTP/2
-curl -I --http2 https://your-domain.com
+# Run without nginx (use WEB_PORT directly)
+docker compose up -d --scale nginx=0
 ```
 
 ## 📊 Performance & Capacity
@@ -500,9 +594,14 @@ sudo chown $USER:$USER /mnt/medical_backups/raman_backups
 ## 📞 Support & Monitoring
 
 ### Health Checks
-- Application: `http://localhost:5000/health`
-- Nginx: `docker-compose logs nginx`
+- Application: `http://localhost:5000/health` (or via nginx on `HTTP_PORT`)
+- Web/app: `docker compose ps` → `medical_web` should be `Up (healthy)`
+- Export worker: `docker compose logs export_worker` → look for `[export-worker] started` and `[export] job <id> done`
+- Nginx: `docker compose logs nginx`
 - Database: `psql -U postgres -c "SELECT version();"`
+
+> The `export_worker` container intentionally has **no** healthcheck (it runs no
+> web server), so it shows plain `Up` rather than `(healthy)`. That's expected.
 
 ### Performance Testing
 ```bash
@@ -529,9 +628,11 @@ Private medical research project. All rights reserved.
 
 ---
 
-**Version:** 2.0  
-**Last Updated:** December 2025  
+**Version:** 2.1  
+**Last Updated:** June 2026  
 **Status:** Production Ready  
-**Database Schema Version:** 2.0  
-**Network Protocol:** HTTP/2 Ready (HTTP/1.1 default, HTTP/2 with SSL)  
-**Security**: TLS 1.3, HSTS, Modern Ciphers
+**Database Schema Version:** 2.1 (adds self-migrating `export_jobs` queue)  
+**Exports:** Streaming (chunked) + background jobs with progress, cancellation & auto-cleanup  
+**Deployment:** Docker (x86_64 & ARM/Raspberry Pi), fully configurable host ports  
+**Network Protocol:** HTTP/1.1 default; HTTP/2 opt-in with SSL  
+**Security:** Bcrypt, role-based access, sensitive/statistical split, SHA-256 person hashing
